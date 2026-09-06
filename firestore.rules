@@ -1,0 +1,41 @@
+rules_version = '2';
+
+// WorkDay - app chấm công & tính lương, 1 tài khoản duy nhất.
+//
+// Cách áp dụng:
+//   Firebase Console > Firestore Database > Rules > dán nội dung này > Publish.
+//
+// Vì app không có phân quyền, chỉ cần một điều kiện: đã đăng nhập.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    // Tài khoản duy nhất của app.
+    match /app_user/{docId} {
+      allow read, write: if signedIn();
+    }
+
+    // Hồ sơ nhân viên + lương/ngày + đơn giá tăng ca.
+    match /employees/{employeeId} {
+      allow read, write: if signedIn();
+    }
+
+    // Một bản ghi cho mỗi nhân viên / ngày.
+    match /attendance/{recordId} {
+      allow read, write: if signedIn();
+    }
+
+    // Thiết lập chung.
+    match /settings/{docId} {
+      allow read, write: if signedIn();
+    }
+
+    // Mọi thứ khác đều bị chặn.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

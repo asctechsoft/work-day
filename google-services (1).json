@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "923485174653",
+    "project_id": "tick-go",
+    "storage_bucket": "tick-go.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:923485174653:android:7d7a33581f3db7ae45ea14",
+        "android_client_info": {
+          "package_name": "com.campany.tickgo"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBkwiPQMIxAh0nPH_ZphT2QiYZS5NNkyBA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
