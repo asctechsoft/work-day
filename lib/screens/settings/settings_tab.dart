@@ -2,23 +2,60 @@ import 'package:flutter/material.dart';
 
 import '../../core/theme.dart';
 import '../../services/auth_service.dart';
+import '../../widgets/common.dart';
+import '../admin/company_list_screen.dart';
 import 'about_screen.dart';
 import 'account_screen.dart';
 import 'employee_list_screen.dart';
 import 'general_settings_screen.dart';
+import 'review_screen.dart';
 import 'salary_settings_screen.dart';
 
 /// Tab Cài đặt: gom toàn bộ phần quản lý dữ liệu để navigation chỉ có 3 tab.
-class SettingsTab extends StatelessWidget {
+class SettingsTab extends StatefulWidget {
   const SettingsTab({super.key});
 
   @override
+  State<SettingsTab> createState() => _SettingsTabState();
+}
+
+class _SettingsTabState extends State<SettingsTab> {
+  /// Hồ sơ `users/{uid}` - chỉ dùng để biết có phải tài khoản tổng không.
+  ///
+  /// Dựng một lần trong `State`: `watchAccount()` tạo stream mới mỗi lần gọi,
+  /// để trong `build` là mỗi lần vẽ lại một lần đăng ký nghe.
+  late final Stream<Map<String, dynamic>> _profile = AuthService.instance
+      .watchAccount();
+
+  @override
   Widget build(BuildContext context) {
+    return StreamBuilder<Map<String, dynamic>>(
+      stream: _profile,
+      builder: (context, snap) {
+        // Lỗi đọc (vừa đăng xuất chẳng hạn) thì coi như tài khoản thường.
+        final isSuper =
+            snap.hasData && AuthService.isSuperAccount(snap.data!);
+        return _buildBody(context, isSuper);
+      },
+    );
+  }
+
+  Widget _buildBody(BuildContext context, bool isSuper) {
     return Scaffold(
       appBar: AppBar(title: const Text('Cài đặt')),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 28),
         children: [
+          // Chỉ tài khoản tổng thấy dòng này. Thấy được cũng không đọc được
+          // gì thêm: rules chặn theo danh sách uid, không theo trường `role`.
+          if (isSuper)
+            _SettingItem(
+              icon: Icons.store_mall_directory_outlined,
+              color: AppColors.info,
+              title: 'Quản lý cơ sở',
+              subtitle: 'Xem báo cáo của tất cả cơ sở (chỉ đọc)',
+              onTap: () => _open(context, const CompanyListScreen()),
+            ),
           _SettingItem(
             icon: Icons.person_outline_rounded,
             color: AppColors.info,
@@ -46,6 +83,13 @@ class SettingsTab extends StatelessWidget {
             title: 'Thiết lập chung',
             subtitle: 'Tiền tệ, mốc tăng ca nhanh, giờ làm mỗi ngày',
             onTap: () => _open(context, const GeneralSettingsScreen()),
+          ),
+          _SettingItem(
+            icon: Icons.star_outline_rounded,
+            color: AppColors.overtime,
+            title: 'Đánh giá ứng dụng',
+            subtitle: 'Cho sao và góp ý để app tốt hơn',
+            onTap: () => _open(context, const ReviewScreen()),
           ),
           _SettingItem(
             icon: Icons.info_outline_rounded,
@@ -85,7 +129,7 @@ class SettingsTab extends StatelessWidget {
   }
 
   void _open(BuildContext context, Widget screen) {
-    Navigator.of(context).push(MaterialPageRoute(builder: (_) => screen));
+    pushScreen(context, screen);
   }
 
   Future<void> _confirmSignOut(BuildContext context) async {

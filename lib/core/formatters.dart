@@ -1,5 +1,7 @@
 import 'package:flutter/services.dart';
 
+import 'lunar.dart';
+
 /// Các hàm định dạng dùng chung: tiền VND, ngày tháng tiếng Việt, giờ tăng ca.
 class Fmt {
   static const _weekdays = <String>[
@@ -60,18 +62,10 @@ class Fmt {
   /// 5200000 -> "5.200.000đ"
   static String currency(num value) => '${money(value)}đ';
 
-  /// Rút gọn cho ô thống kê: 39600000 -> "39.600.000"
-  static String moneyCompact(num value) {
-    if (value >= 1000000000) {
-      final v = value / 1000000000;
-      return '${_trim(v)} tỷ';
-    }
-    if (value >= 1000000) {
-      final v = value / 1000000;
-      return '${_trim(v)} tr';
-    }
-    return money(value);
-  }
+  // Từng có moneyCompact() rút "22.400.000" thành "22,4 tr" cho ô thống kê
+  // chật. Đã bỏ: người dùng phản hồi số rút gọn khó đọc, mọi chỗ hiện tiền
+  // đều dùng money()/currency() với số đầy đủ. Ô nào không đủ chỗ thì đổi bố
+  // cục (xem StatGrid), đừng cắt bớt con số.
 
   /// Một chữ số thập phân, dùng dấu phẩy theo cách viết tiếng Việt.
   static String _trim(double v) {
@@ -80,12 +74,37 @@ class Fmt {
     return trimmed.replaceAll('.', ',');
   }
 
-  /// 90 phút -> "1.5h"; 0 -> "0h"
+  /// Giờ tăng ca viết theo cách người dùng nghĩ, không dùng giờ thập phân:
+  /// 0 -> "0h" · 25 -> "25p" · 60 -> "1h" · 90 -> "1h30".
+  ///
+  /// Cố ý **không** viết "0,4h" nữa: người dùng đọc "0.4h" ra thành 40 phút.
   static String otHours(int minutes) {
     if (minutes <= 0) return '0h';
-    final h = minutes / 60.0;
-    final s = h.toStringAsFixed(1);
-    return s.endsWith('.0') ? '${s.substring(0, s.length - 2)}h' : '${s}h';
+    if (minutes < 60) return '${minutes}p';
+    final h = minutes ~/ 60;
+    final m = minutes % 60;
+    return m == 0 ? '${h}h' : '${h}h${m.toString().padLeft(2, '0')}';
+  }
+
+  /// Số giờ dạng thập phân kiểu Việt ("1,5") - chỉ dùng cho file xuất,
+  /// nơi ô ngày ghi theo bảng công giấy.
+  static String otHoursDecimal(int minutes) {
+    if (minutes <= 0) return '0';
+    return _trim(minutes / 60.0);
+  }
+
+  /// Ngày âm lịch viết gọn để vẽ dưới số ngày dương trong lịch: "24", hoặc
+  /// "1/8" ở ngày mùng 1 (thêm "N" nếu là tháng nhuận).
+  static String lunarShort(DateTime d) => LunarDate.fromSolar(d).shortLabel;
+
+  /// "Âm lịch 24/7 Bính Ngọ" - dùng ở thẻ ngày đang chọn.
+  static String lunarFull(DateTime d) =>
+      'Âm lịch ${LunarDate.fromSolar(d).fullLabel}';
+
+  /// "Âm 24/7" - dòng phụ ngắn trên thanh chọn ngày.
+  static String lunarBrief(DateTime d) {
+    final l = LunarDate.fromSolar(d);
+    return 'Âm ${l.day}/${l.month}${l.isLeapMonth ? ' nhuận' : ''}';
   }
 
   /// Số giờ dạng số thực dùng để tính tiền.

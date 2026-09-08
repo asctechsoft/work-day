@@ -21,8 +21,50 @@ class AppColors {
   static const absentSoft = Color(0xFFFDE9E9);
   static const overtime = Color(0xFFE08600);
   static const overtimeSoft = Color(0xFFFFF3E0);
+
+  // Nền đậm vừa, dùng cho ô nhỏ (ô ngày trong lịch): các màu *Soft* ở trên
+  // quá nhạt, ô cỡ 45px nhìn ra gần như trắng nên không phân biệt được.
+  static const presentMedium = Color(0xFFBCE7D3);
+  static const overtimeMedium = Color(0xFFFFDDAF);
   static const info = Color(0xFF2F80ED);
   static const infoSoft = Color(0xFFE8F1FE);
+
+  // Ba mức xanh của nút chính (xanh ngọc -> mint), dùng trong
+  // [AppGradients.primaryButton].
+  static const buttonGradientStart = Color(0xFF36CFA4);
+  static const buttonGradientMid = Color(0xFF27C590);
+  static const buttonGradientEnd = Color(0xFF42D08A);
+
+  /// Màu icon tick nằm trong vòng tròn trắng của nút chính.
+  static const buttonIcon = Color(0xFF25B889);
+}
+
+/// Các dải màu chuyển. Tách riêng khỏi [AppColors] cho dễ tìm, nhưng cùng quy
+/// tắc: màn hình **không được** tự dựng gradient tại chỗ, phải lấy ở đây.
+class AppGradients {
+  /// Nền của mọi màn: xanh rất nhạt ở đỉnh, loang dần về gần trắng.
+  ///
+  /// Áp một lần ở `MaterialApp.builder` (xem `main.dart`) và
+  /// `scaffoldBackgroundColor` để trong suốt, nên mọi màn - kể cả màn được
+  /// `push` - đều dùng chung đúng nền này.
+  static const page = LinearGradient(
+    begin: Alignment.topCenter,
+    end: Alignment.bottomCenter,
+    colors: [Color(0xFFE6FBF4), Color(0xFFF8FCFB), Color(0xFFF5F9FB)],
+    stops: [0, 0.35, 1],
+  );
+
+  /// Nút hành động chính ("Tất cả đi làm").
+  static const primaryButton = LinearGradient(
+    begin: Alignment.centerLeft,
+    end: Alignment.centerRight,
+    colors: [
+      AppColors.buttonGradientStart,
+      AppColors.buttonGradientMid,
+      AppColors.buttonGradientEnd,
+    ],
+    stops: [0, 0.5, 1],
+  );
 }
 
 class AppTheme {
@@ -34,12 +76,15 @@ class AppTheme {
         primary: AppColors.primary,
         surface: AppColors.surface,
       ),
-      scaffoldBackgroundColor: AppColors.background,
+      // Trong suốt để thấy nền gradient dựng ở MaterialApp.builder.
+      scaffoldBackgroundColor: Colors.transparent,
     );
 
     return base.copyWith(
       appBarTheme: const AppBarTheme(
-        backgroundColor: AppColors.surface,
+        // Trong suốt để thanh tiêu đề liền một mảng với nền gradient, không
+        // thành một dải trắng cắt ngang đầu màn.
+        backgroundColor: Colors.transparent,
         foregroundColor: AppColors.textDark,
         elevation: 0,
         centerTitle: true,

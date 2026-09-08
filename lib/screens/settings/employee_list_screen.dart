@@ -22,9 +22,7 @@ class _EmployeeListScreenState extends State<EmployeeListScreen> {
   bool _showInactive = false;
 
   void _openForm([Employee? employee]) {
-    Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => EmployeeFormScreen(employee: employee)),
-    );
+    pushScreen(context, EmployeeFormScreen(employee: employee));
   }
 
   Future<void> _toggleActive(Employee e) async {
@@ -219,12 +217,20 @@ class _EmployeeListScreenState extends State<EmployeeListScreen> {
                             : null,
                       )
                     : ListView.separated(
-                        padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
+                        // Cộng chiều cao thanh điều hướng Android vào đáy,
+                        // không thì dòng cuối bị che (xem §5.2.3).
+                        padding: EdgeInsets.fromLTRB(
+                          16,
+                          4,
+                          16,
+                          24 + MediaQuery.viewPaddingOf(context).bottom,
+                        ),
                         itemCount: visible.length,
                         separatorBuilder: (_, _) => const SizedBox(height: 8),
                         itemBuilder: (_, i) {
                           final e = visible[i];
                           return _EmployeeRow(
+                            index: i + 1,
                             employee: e,
                             onEdit: () => _openForm(e),
                             onToggleActive: () => _toggleActive(e),
@@ -242,12 +248,15 @@ class _EmployeeListScreenState extends State<EmployeeListScreen> {
 }
 
 class _EmployeeRow extends StatelessWidget {
+  /// Số thứ tự hiển thị, bắt đầu từ 1.
+  final int index;
   final Employee employee;
   final VoidCallback onEdit;
   final VoidCallback onToggleActive;
   final VoidCallback onDelete;
 
   const _EmployeeRow({
+    required this.index,
     required this.employee,
     required this.onEdit,
     required this.onToggleActive,
@@ -261,7 +270,7 @@ class _EmployeeRow extends StatelessWidget {
     return Opacity(
       opacity: e.active ? 1 : 0.62,
       child: Container(
-        padding: const EdgeInsets.fromLTRB(12, 10, 4, 10),
+        padding: const EdgeInsets.fromLTRB(8, 10, 4, 10),
         decoration: BoxDecoration(
           color: AppColors.surface,
           borderRadius: BorderRadius.circular(14),
@@ -269,6 +278,19 @@ class _EmployeeRow extends StatelessWidget {
         ),
         child: Row(
           children: [
+            SizedBox(
+              width: 22,
+              child: Text(
+                '$index',
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.textMuted,
+                ),
+              ),
+            ),
+            const SizedBox(width: 4),
             EmployeeAvatar(initials: e.initials, size: 40),
             const SizedBox(width: 12),
             Expanded(

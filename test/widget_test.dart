@@ -1,8 +1,10 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tick_go/core/formatters.dart';
+import 'package:tick_go/core/lunar.dart';
 import 'package:tick_go/core/pay_period.dart';
 import 'package:tick_go/models/attendance_record.dart';
 import 'package:tick_go/models/employee.dart';
+import 'package:tick_go/services/auth_service.dart';
 import 'package:tick_go/services/data_service.dart';
 
 void main() {
@@ -14,12 +16,22 @@ void main() {
       expect(Fmt.currency(7650000), '7.650.000đ');
     });
 
-    test('giờ tăng ca hiển thị gọn', () {
+    test('giờ tăng ca hiển thị theo giờ + phút, không dùng giờ thập phân', () {
       expect(Fmt.otHours(0), '0h');
-      expect(Fmt.otHours(30), '0.5h');
+      expect(Fmt.otHours(25), '25p');
+      expect(Fmt.otHours(30), '30p');
+      expect(Fmt.otHours(59), '59p');
       expect(Fmt.otHours(60), '1h');
-      expect(Fmt.otHours(90), '1.5h');
+      expect(Fmt.otHours(90), '1h30');
+      expect(Fmt.otHours(65), '1h05');
       expect(Fmt.otHours(120), '2h');
+    });
+
+    test('giờ tăng ca dạng thập phân chỉ dùng cho file xuất', () {
+      expect(Fmt.otHoursDecimal(0), '0');
+      expect(Fmt.otHoursDecimal(30), '0,5');
+      expect(Fmt.otHoursDecimal(90), '1,5');
+      expect(Fmt.otHoursDecimal(120), '2');
     });
 
     test('khoá ngày và khoá tháng', () {
@@ -216,6 +228,129 @@ void main() {
     });
   });
 
+  group('Quỹ lương theo quý / theo năm', () {
+    const lan = Employee(
+      id: 'lan',
+      name: 'Cô Lan',
+      dailySalary: 300000,
+      otRate: 50000,
+    );
+    // Người đã nghỉ việc nhưng vẫn còn công trong kỳ cũ.
+    const cu = Employee(
+      id: 'cu',
+      name: 'Cô Cũ',
+      dailySalary: 200000,
+      active: false,
+    );
+
+    AttendanceRecord rec(String id, String date, int ot) => AttendanceRecord(
+      employeeId: id,
+      workDate: date,
+      month: date.substring(0, 7),
+      status: AttendanceStatus.present,
+      workUnits: 1,
+      overtimeMinutes: ot,
+    );
+
+    test('kỳ thuộc quý nào - tính theo tháng chốt kỳ', () {
+      // Kỳ trùng tháng dương lịch.
+      expect(PayPeriod.of(DateTime(2026, 1), 1).quarter, 1);
+      expect(PayPeriod.of(DateTime(2026, 3), 1).quarter, 1);
+      expect(PayPeriod.of(DateTime(2026, 4), 1).quarter, 2);
+      expect(PayPeriod.of(DateTime(2026, 9), 1).quarter, 3);
+      expect(PayPeriod.of(DateTime(2026, 12), 1).quarter, 4);
+
+      // Kỳ vắt hai tháng vẫn thuộc quý của tháng chốt: 26/08 - 25/09 là quý 3.
+      final p = PayPeriod.of(DateTime(2026, 9), 26);
+      expect(p.start, DateTime(2026, 8, 26));
+      expect(p.quarter, 3);
+      // 26/09 - 25/10 chốt trong tháng 10 nên đã sang quý 4.
+      expect(PayPeriod.of(DateTime(2026, 10), 26).quarter, 4);
+    });
+
+    test('tổng quỹ lương của một nhóm bản ghi gộp cả người đã nghỉ việc', () {
+      final records = [
+        rec('lan', '2026-09-01', 0),
+        rec('lan', '2026-09-02', 60),
+        rec('cu', '2026-09-01', 0),
+      ];
+
+      final total = DataService.totalPayrollOf([lan, cu], records);
+
+      // Lan: 2 công x 300.000 + 1h x 50.000 = 650.000
+      // Cô Cũ đã nghỉ việc nhưng có công nên vẫn tính: 1 x 200.000
+      expect(total, 650000 + 200000);
+    });
+
+    test('quỹ lương của một quý là tổng ba kỳ trong quý đó', () {
+      final byMonth = {
+        7: [rec('lan', '2026-07-01', 0), rec('lan', '2026-07-02', 0)],
+        8: [rec('lan', '2026-08-01', 0)],
+        9: [rec('lan', '2026-09-01', 120)],
+      };
+
+      var quarterTotal = 0.0;
+      for (final month in [7, 8, 9]) {
+        final p = PayPeriod.of(DateTime(2026, month), 1);
+        expect(p.quarter, 3);
+        quarterTotal += DataService.totalPayrollOf([lan], byMonth[month]!);
+      }
+
+      // 4 công x 300.000 + 2h x 50.000
+      expect(quarterTotal, 4 * 300000 + 2 * 50000);
+    });
+
+    test('kỳ không có bản ghi nào thì quỹ lương bằng 0', () {
+      expect(DataService.totalPayrollOf([lan], const []), 0);
+    });
+  });
+
+  group('Âm lịch', () {
+    // Mốc kiểm chứng lấy từ lịch in: mùng 1 Tết các năm, rằm Trung thu và
+    // hai năm có tháng nhuận. Sai một ngày là hỏng cả cột âm lịch trong lịch
+    // chọn ngày, nên phải khoá bằng test.
+    test('mùng 1 Tết các năm rơi đúng ngày dương', () {
+      void tet(DateTime solar, int year, String canChi) {
+        final l = LunarDate.fromSolar(solar);
+        expect(l.day, 1, reason: '$solar');
+        expect(l.month, 1, reason: '$solar');
+        expect(l.year, year, reason: '$solar');
+        expect(l.isLeapMonth, isFalse, reason: '$solar');
+        expect(l.canChi, canChi, reason: '$solar');
+      }
+
+      tet(DateTime(2023, 1, 22), 2023, 'Quý Mão');
+      tet(DateTime(2024, 2, 10), 2024, 'Giáp Thìn');
+      tet(DateTime(2025, 1, 29), 2025, 'Ất Tỵ');
+      tet(DateTime(2026, 2, 17), 2026, 'Bính Ngọ');
+    });
+
+    test('rằm Trung thu 2024 là 17/09 dương', () {
+      final l = LunarDate.fromSolar(DateTime(2024, 9, 17));
+      expect(l.day, 15);
+      expect(l.month, 8);
+    });
+
+    test('nhận ra tháng nhuận', () {
+      // Ất Tỵ 2025 nhuận tháng 6, Quý Mão 2023 nhuận tháng 2.
+      final l2025 = LunarDate.fromSolar(DateTime(2025, 8, 1));
+      expect(l2025.month, 6);
+      expect(l2025.isLeapMonth, isTrue);
+
+      final l2023 = LunarDate.fromSolar(DateTime(2023, 3, 25));
+      expect(l2023.month, 2);
+      expect(l2023.isLeapMonth, isTrue);
+    });
+
+    test('nhãn ngắn chỉ hiện tháng ở mùng 1', () {
+      // 17/02/2026 là mùng 1 tháng giêng.
+      expect(Fmt.lunarShort(DateTime(2026, 2, 17)), '1/1');
+      expect(Fmt.lunarShort(DateTime(2026, 2, 18)), '2');
+      // Ngày đầu tháng 6 nhuận Ất Tỵ: 25/07/2025.
+      expect(Fmt.lunarShort(DateTime(2025, 7, 25)), '1/6N');
+    });
+  });
+
   group('Nhân viên', () {
     test('chữ cái đầu dùng cho avatar', () {
       expect(
@@ -282,6 +417,32 @@ void main() {
       expect(after.start, DateTime(2026, 9, 26));
       expect(after.end, DateTime(2026, 10, 25));
       expect(after.contains(DateTime(2026, 9, 27)), isTrue);
+    });
+
+    test('kỳ chứa một ngày bất kỳ - lịch chọn ngày dựa vào phép này', () {
+      // Lịch ở tab Chấm công vẽ lưới theo kỳ, nên với mọi ngày trong kỳ nó
+      // phải dựng ra đúng một kỳ duy nhất chứa ngày đó.
+      for (final day in [
+        DateTime(2026, 8, 28),
+        DateTime(2026, 9, 1),
+        DateTime(2026, 9, 15),
+        DateTime(2026, 9, 27),
+      ]) {
+        final p = PayPeriod.current(28, now: day);
+        expect(p.start, DateTime(2026, 8, 28), reason: '$day');
+        expect(p.end, DateTime(2026, 9, 27), reason: '$day');
+        expect(p.contains(day), isTrue, reason: '$day');
+      }
+
+      // Ngày ngay trước mốc chốt thuộc kỳ liền trước.
+      final prev = PayPeriod.current(28, now: DateTime(2026, 8, 27));
+      expect(prev.start, DateTime(2026, 7, 28));
+      expect(prev.end, DateTime(2026, 8, 27));
+
+      // startDay = 1 thì kỳ trùng tháng dương lịch.
+      final calendar = PayPeriod.current(1, now: DateTime(2026, 9, 15));
+      expect(calendar.start, DateTime(2026, 9, 1));
+      expect(calendar.end, DateTime(2026, 9, 30));
     });
 
     test('contains chặn đúng hai đầu mút', () {
@@ -355,6 +516,32 @@ void main() {
       expect(s.totalWorkUnits, 6);
       expect(s.overtimeMinutes, 120);
       expect(s.totalPay, 6 * 300000 + 2 * 50000);
+    });
+  });
+
+  // Bản nhiều cơ sở: mỗi tài khoản chủ = một cơ sở, companyId = uid.
+  group('Tài khoản và cơ sở', () {
+    test('email thật giữ nguyên, tên tài khoản ngắn mới ghép hậu tố', () {
+      // Đăng ký bản mới bắt buộc email thật để gửi được mail đặt lại mật khẩu.
+      expect(
+        AuthService.normalizeAccount('  Chu@Gmail.com '),
+        'Chu@Gmail.com',
+      );
+      // Tài khoản kiểu cũ (không có @) vẫn phải đăng nhập được.
+      expect(AuthService.normalizeAccount('admin'), 'admin@tickgo.app');
+    });
+
+    test('displayAccount chỉ bỏ hậu tố nội bộ, email thật để nguyên', () {
+      expect(AuthService.displayAccount('admin@tickgo.app'), 'admin');
+      expect(AuthService.displayAccount('chu@gmail.com'), 'chu@gmail.com');
+    });
+
+    test('chỉ role "super" mới là tài khoản tổng', () {
+      expect(AuthService.isSuperAccount({'role': 'super'}), isTrue);
+      expect(AuthService.isSuperAccount({'role': 'owner'}), isFalse);
+      expect(AuthService.isSuperAccount({}), isFalse);
+      // Không có role thì là chủ cơ sở thường - đây là trường hợp phổ biến nhất.
+      expect(AuthService.isSuperAccount({'companyId': 'abc'}), isFalse);
     });
   });
 }

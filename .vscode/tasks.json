@@ -1,0 +1,50 @@
+{
+    // Lệnh build/analyze hay dùng. Mọi lệnh chạm tới Android đều phải có
+    // `--flavor` (xem .vscode/launch.json và CLAUDE.md mục "Môi trường dev / product").
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "flutter: pub get",
+            "type": "shell",
+            "command": "flutter pub get",
+            "problemMatcher": []
+        },
+        {
+            "label": "flutter: analyze",
+            "type": "shell",
+            "command": "flutter analyze",
+            "problemMatcher": []
+        },
+        {
+            "label": "flutter: test",
+            "type": "shell",
+            "command": "flutter test",
+            "group": "test",
+            "problemMatcher": []
+        },
+        {
+            // APK giao cho người dùng — dữ liệu thật.
+            "label": "flutter: build apk (product release)",
+            "type": "shell",
+            "command": "flutter build apk --release --flavor product",
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "flutter: build apk (dev debug)",
+            "type": "shell",
+            "command": "flutter build apk --debug --flavor dev",
+            "group": "build",
+            "problemMatcher": []
+        },
+        {
+            "label": "flutter: clean",
+            "type": "shell",
+            "command": "flutter clean",
+            "problemMatcher": []
+        }
+    ]
+}

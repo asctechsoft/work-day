@@ -1,37 +1,22 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'core/theme.dart';
-import 'firebase_options.dart';
-import 'screens/home_shell.dart';
-import 'screens/intro_screen.dart';
 import 'screens/login_screen.dart';
-import 'services/auth_service.dart';
+import 'screens/splash_screen.dart';
+import 'widgets/common.dart';
 
-Future<void> main() async {
+void main() {
   WidgetsFlutterBinding.ensureInitialized();
-
-  await Firebase.initializeApp(
-    options: DefaultFirebaseOptions.currentPlatform,
-  );
-
-  // Cho phép chấm công khi mất mạng, dữ liệu tự đồng bộ lại sau.
-  FirebaseFirestore.instance.settings = const Settings(
-    persistenceEnabled: true,
-    cacheSizeBytes: Settings.CACHE_SIZE_UNLIMITED,
-  );
-
-  // Nếu lần trước không chọn "Lưu đăng nhập" thì bắt đăng nhập lại.
-  await AuthService.instance.applyRememberPolicyOnStart();
 
   SystemChrome.setPreferredOrientations([
     DeviceOrientation.portraitUp,
     DeviceOrientation.portraitDown,
   ]);
 
+  // Chạy app ngay, KHÔNG chờ Firebase ở đây: chờ ở đây thì người dùng nhìn
+  // màn trắng của hệ thống mấy giây. Việc khởi tạo nằm trong [SplashScreen],
+  // chạy trong lúc màn chào đang hiện.
   runApp(const WorkDayApp());
 }
 
@@ -53,44 +38,24 @@ class WorkDayApp extends StatelessWidget {
         );
         return MediaQuery(
           data: MediaQuery.of(context).copyWith(textScaler: scale),
-          child: child!,
+          // Nền gradient của cả app dựng đúng một lần ở đây, còn
+          // `scaffoldBackgroundColor` để trong suốt (xem `AppGradients.page`).
+          // Nhờ vậy mọi màn - kể cả màn được push - có cùng một nền, không
+          // phải bọc Container ở từng màn.
+          child: DecoratedBox(
+            decoration: const BoxDecoration(gradient: AppGradients.page),
+            child: child!,
+          ),
         );
       },
-      home: const _AuthGate(),
-    );
-  }
-}
-
-/// Điều hướng gốc: chưa đăng nhập -> màn mở app -> đăng nhập.
-/// Đã đăng nhập -> vào thẳng 3 tab.
-class _AuthGate extends StatelessWidget {
-  const _AuthGate();
-
-  @override
-  Widget build(BuildContext context) {
-    return StreamBuilder<User?>(
-      stream: AuthService.instance.authState,
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Scaffold(
-            backgroundColor: AppColors.surface,
-            body: Center(
-              child: CircularProgressIndicator(color: AppColors.primary),
-            ),
-          );
-        }
-        if (snapshot.data == null) {
-          return const IntroScreen();
-        }
-        return const HomeShell();
-      },
+      // Vào app là thấy màn chào ngay; nó tự chuyển sang `AuthGate` khi khởi
+      // tạo xong (xem `screens/splash_screen.dart`).
+      home: const SplashScreen(),
     );
   }
 }
 
 /// Điều hướng tới màn đăng nhập từ màn mở app.
 void goToLogin(BuildContext context) {
-  Navigator.of(context).push(
-    MaterialPageRoute(builder: (_) => const LoginScreen()),
-  );
+  pushScreen(context, const LoginScreen());
 }

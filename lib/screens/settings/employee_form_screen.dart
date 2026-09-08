@@ -114,7 +114,12 @@ class _EmployeeFormScreenState extends State<EmployeeFormScreen> {
       body: Form(
         key: _formKey,
         child: ListView(
-          padding: const EdgeInsets.fromLTRB(16, 16, 16, 28),
+          padding: EdgeInsets.fromLTRB(
+            16,
+            16,
+            16,
+            28 + MediaQuery.viewPaddingOf(context).bottom,
+          ),
           children: [
             Center(
               child: EmployeeAvatar(

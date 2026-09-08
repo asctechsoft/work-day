@@ -114,8 +114,9 @@ class _EmployeeMonthScreenState extends State<EmployeeMonthScreen> {
 
               PeriodSelector(
                 label: _period.title,
-                subLabel:
-                    _period.isCalendarMonth ? null : _period.rangeLabel,
+                // Cùng cách hiện như tab Tổng quan: luôn nói rõ kỳ này tính
+                // công từ ngày nào đến ngày nào.
+                subLabel: 'Tính công ${_period.rangeLabel}',
                 onPrev: () => _shiftMonth(-1),
                 onNext: () => _shiftMonth(1),
               ),
@@ -127,16 +128,19 @@ class _EmployeeMonthScreenState extends State<EmployeeMonthScreen> {
                     value: Fmt.workUnits(units),
                     label: 'Công',
                     color: AppColors.present,
+                    icon: Icons.check_rounded,
                   ),
                   StatTile(
                     value: '$absent',
                     label: 'Nghỉ',
                     color: AppColors.absent,
+                    icon: Icons.nightlight_round,
                   ),
                   StatTile(
                     value: Fmt.otHours(ot),
                     label: 'Tăng ca',
                     color: AppColors.info,
+                    icon: Icons.access_time_filled_rounded,
                   ),
                 ],
               ),

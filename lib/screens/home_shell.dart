@@ -5,6 +5,7 @@ import '../core/theme.dart';
 import 'attendance/attendance_tab.dart';
 import 'overview/overview_tab.dart';
 import 'settings/settings_tab.dart';
+import 'welcome_dialog.dart';
 
 /// Bộ khung 3 tab duy nhất của app: Chấm công - Tổng quan - Cài đặt.
 class HomeShell extends StatefulWidget {
@@ -26,6 +27,12 @@ class HomeShellState extends State<HomeShell> {
   void initState() {
     super.initState();
     AppEvents.requestTab.addListener(_onTabRequested);
+    // Dialog chào mừng, chỉ hiện lần đầu của mỗi tài khoản trên máy đó.
+    // Phải chờ khung hình đầu: trong `initState` chưa có `Overlay` để đẩy
+    // dialog lên.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) showWelcomeIfFirstTime(context);
+    });
   }
 
   @override

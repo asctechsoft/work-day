@@ -11,8 +11,10 @@ import '../../models/employee.dart';
 import '../../services/data_service.dart';
 import '../../services/export_service.dart';
 import '../../widgets/common.dart';
-import '../../widgets/salary_chart.dart';
+import '../../widgets/highlights_card.dart';
+import '../../widgets/payroll_trend_chart.dart';
 import 'employee_month_screen.dart';
+import 'period_picker_sheet.dart';
 
 /// Tab Tổng quan: tổng công, OT và lương của cả kỳ lương.
 /// Lương luôn tính lại từ dữ liệu công nên không cần "chốt bảng lương".
@@ -30,7 +32,7 @@ class _OverviewTabState extends State<OverviewTab> {
   StreamSubscription<AppSettings>? _settingsSub;
 
   DateTime _anchor = DateTime(DateTime.now().year, DateTime.now().month);
-  int _view = 0; // 0 = danh sách, 1 = biểu đồ
+  int _view = 0; // 0 = bảng lương, 1 = biểu đồ
   bool _exporting = false;
 
   PayPeriod get _period => PayPeriod.of(_anchor, _settings.payPeriodStartDay);
@@ -62,6 +64,17 @@ class _OverviewTabState extends State<OverviewTab> {
 
   void _shiftMonth(int months) {
     setState(() => _anchor = DateTime(_anchor.year, _anchor.month + months));
+  }
+
+  /// Chạm vào tên kỳ: mở danh sách kỳ để nhảy thẳng, khỏi bấm ‹ › nhiều lần.
+  Future<void> _pickPeriod() async {
+    final picked = await showPeriodPicker(
+      context,
+      current: _period,
+      startDay: _settings.payPeriodStartDay,
+    );
+    if (picked == null || !mounted) return;
+    setState(() => _anchor = picked);
   }
 
   Future<void> _export() async {
@@ -164,31 +177,46 @@ class _OverviewTabState extends State<OverviewTab> {
             children: [
               PeriodSelector(
                 label: period.title,
-                subLabel: period.isCalendarMonth ? null : period.rangeLabel,
+                // Luôn hiện khoảng ngày, kể cả khi kỳ trùng tháng dương lịch:
+                // câu hỏi đầu tiên của người dùng là "công tháng này tính từ
+                // ngày nào đến ngày nào".
+                subLabel: 'Tính công ${period.rangeLabel}',
                 onPrev: () => _shiftMonth(-1),
                 onNext: () => _shiftMonth(1),
+                onTapLabel: _pickPeriod,
+                trailingIcon: Icons.expand_more_rounded,
               ),
               const SizedBox(height: 12),
-              StatRow(
-                children: [
-                  StatTile(
+              // Lưới 2 cột thay vì một hàng 4 ô: số tiền viết đủ được, không
+              // phải rút thành "22,4 tr" nữa.
+              StatGrid(
+                items: [
+                  StatItem(
+                    label: 'Nhân viên',
                     value: '${employees.length}',
-                    label: 'Tổng nhân viên',
-                  ),
-                  StatTile(
-                    value: Fmt.workUnits(totalUnits),
-                    label: 'Tổng công',
-                    color: AppColors.present,
-                  ),
-                  StatTile(
-                    value: Fmt.otHours(totalOt),
-                    label: 'Tổng OT',
-                    color: AppColors.info,
-                  ),
-                  StatTile(
-                    value: Fmt.moneyCompact(totalPay),
-                    label: 'Tổng quỹ lương',
+                    unit: 'người',
                     color: AppColors.primaryDark,
+                    icon: Icons.groups_rounded,
+                  ),
+                  StatItem(
+                    label: 'Tổng công',
+                    value: Fmt.workUnits(totalUnits),
+                    unit: 'công',
+                    color: AppColors.present,
+                    icon: Icons.check_rounded,
+                  ),
+                  StatItem(
+                    label: 'Tổng tăng ca',
+                    value: Fmt.otHours(totalOt),
+                    color: AppColors.info,
+                    icon: Icons.access_time_filled_rounded,
+                  ),
+                  StatItem(
+                    label: 'Tổng quỹ lương',
+                    value: Fmt.money(totalPay),
+                    unit: 'đ',
+                    color: AppColors.primaryDark,
+                    icon: Icons.payments_rounded,
                   ),
                 ],
               ),
@@ -237,78 +265,40 @@ class _OverviewTabState extends State<OverviewTab> {
                   'tại đây.',
             ),
           )
-        else if (_view == 0)
+        else if (_view == 0) ...[
           _SummaryTable(
             employees: employees,
             summaries: summaries,
             period: period,
-          )
-        else
-          SalaryChart(
-            employees: employees,
+          ),
+          const SizedBox(height: 14),
+          // "Đáng chú ý" nằm ngay dưới bảng lương: cùng là chuyện so sánh
+          // giữa các nhân viên nên đọc liền một mạch.
+          HighlightsCard(
             summaries: summaries,
-            periodTitle: period.title,
+            names: {for (final e in employees) e.id: e.name},
           ),
-
-        if (employees.isNotEmpty) ...[
-          const SizedBox(height: 14),
-          AppCard(
-            child: Column(
-              children: [
-                _totalLine('Tổng công của kỳ', Fmt.workUnits(totalUnits)),
-                const Divider(height: 20),
-                _totalLine('Tổng giờ tăng ca', Fmt.otHours(totalOt)),
-                const Divider(height: 20),
-                Row(
-                  children: [
-                    const Expanded(
-                      child: Text(
-                        'Tổng quỹ lương',
-                        style: TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w700,
-                          color: AppColors.textDark,
-                        ),
-                      ),
-                    ),
-                    Text(
-                      Fmt.currency(totalPay),
-                      style: const TextStyle(
-                        fontSize: 17,
-                        fontWeight: FontWeight.w800,
-                        color: AppColors.primaryDark,
-                      ),
-                    ),
-                  ],
-                ),
-              ],
+          // Thẻ "Chốt kỳ" chỉ nằm ở kiểu xem bảng lương - chỗ người dùng vừa
+          // xem xong con số của từng người thì mới tới lúc xuất file.
+          if (employees.isNotEmpty) ...[
+            const SizedBox(height: 14),
+            _ExportCard(
+              period: period,
+              busy: _exporting,
+              onExport: _export,
             ),
+          ],
+        ] else
+          // Tab Biểu đồ chỉ có biểu đồ. Khối "Tổng công của kỳ / Tổng giờ
+          // tăng ca / Tổng quỹ lương" từng nằm ở đây đã bỏ: cả ba con số đó
+          // đã hiện sẵn ở `StatGrid` ngay đầu màn, lặp lại là thừa.
+          PayrollTrendChart(
+            payPeriodStartDay: _settings.payPeriodStartDay,
+            year: period.anchor.year,
           ),
-          const SizedBox(height: 14),
-          _ExportCard(
-            period: period,
-            busy: _exporting,
-            onExport: _export,
-          ),
-        ],
       ],
     );
   }
-
-  Widget _totalLine(String label, String value) => Row(
-    children: [
-      Expanded(
-        child: Text(label, style: const TextStyle(color: AppColors.textBody)),
-      ),
-      Text(
-        value,
-        style: const TextStyle(
-          fontWeight: FontWeight.w700,
-          color: AppColors.textDark,
-        ),
-      ),
-    ],
-  );
 }
 
 /// Thẻ chốt kỳ: nút tải bảng công ra file Excel.
@@ -380,7 +370,7 @@ class _ViewSwitcher extends StatelessWidget {
       ),
       child: Row(
         children: [
-          _tab('Danh sách nhân viên', 0),
+          _tab('Bảng lương', 0),
           _tab('Biểu đồ', 1),
         ],
       ),
@@ -453,11 +443,19 @@ class _SummaryTable extends StatelessWidget {
                 SizedBox(width: 34, child: _Head('Nghỉ', center: true)),
                 SizedBox(width: 42, child: _Head('OT', center: true)),
                 SizedBox(width: 78, child: _Head('Lương', right: true)),
+                // Chừa chỗ cho mũi tên ở cuối mỗi hàng để các cột thẳng hàng.
+                SizedBox(width: 18),
               ],
             ),
           ),
           for (var i = 0; i < employees.length; i++)
-            _row(context, i, employees[i], byId[employees[i].id]),
+            _row(
+              context,
+              i,
+              employees[i],
+              byId[employees[i].id],
+              last: i == employees.length - 1,
+            ),
           const SizedBox(height: 6),
         ],
       ),
@@ -468,8 +466,9 @@ class _SummaryTable extends StatelessWidget {
     BuildContext context,
     int index,
     Employee e,
-    MonthlySummary? s,
-  ) {
+    MonthlySummary? s, {
+    required bool last,
+  }) {
     final summary =
         s ??
         MonthlySummary(
@@ -481,93 +480,110 @@ class _SummaryTable extends StatelessWidget {
           otRate: e.otRate,
         );
 
-    return InkWell(
-      onTap: () => Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (_) => EmployeeMonthScreen(employee: e, period: period),
+    // Material trong suốt nằm trên nền trắng của AppCard: thiếu nó thì gợn
+    // nước của InkWell bị nền che, chạm vào hàng trông như không có gì xảy ra.
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () => pushScreen(
+          context,
+          EmployeeMonthScreen(employee: e, period: period),
         ),
-      ),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-        decoration: const BoxDecoration(
-          border: Border(bottom: BorderSide(color: AppColors.border)),
-        ),
-        child: Row(
-          children: [
-            SizedBox(
-              width: 22,
-              child: Text(
-                '${index + 1}',
-                style: const TextStyle(
-                  fontSize: 12.5,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          // Dòng cuối không kẻ: vạch dưới người cuối cùng nhìn như bảng còn
+          // dòng nữa mà bị cắt, trong khi thẻ đã hết ở đó.
+          decoration: BoxDecoration(
+            border: last
+                ? null
+                : const Border(bottom: BorderSide(color: AppColors.border)),
+          ),
+          child: Row(
+            children: [
+              SizedBox(
+                width: 22,
+                child: Text(
+                  '${index + 1}',
+                  style: const TextStyle(
+                    fontSize: 12.5,
+                    color: AppColors.textMuted,
+                  ),
+                ),
+              ),
+              Expanded(
+                flex: 4,
+                child: Text(
+                  e.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.textDark,
+                  ),
+                ),
+              ),
+              SizedBox(
+                width: 38,
+                child: Text(
+                  Fmt.workUnits(summary.totalWorkUnits),
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    fontSize: 13.5,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.present,
+                  ),
+                ),
+              ),
+              SizedBox(
+                width: 34,
+                child: Text(
+                  '${summary.absentDays}',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 13.5,
+                    color: summary.absentDays > 0
+                        ? AppColors.absent
+                        : AppColors.textMuted,
+                  ),
+                ),
+              ),
+              SizedBox(
+                width: 42,
+                child: Text(
+                  Fmt.otHours(summary.overtimeMinutes),
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: summary.overtimeMinutes > 0
+                        ? AppColors.info
+                        : AppColors.textMuted,
+                  ),
+                ),
+              ),
+              SizedBox(
+                width: 78,
+                child: Text(
+                  Fmt.money(summary.totalPay),
+                  textAlign: TextAlign.right,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.textDark,
+                  ),
+                ),
+              ),
+              // Dấu cho biết chạm vào hàng là mở được chi tiết người này.
+              const SizedBox(
+                width: 18,
+                child: Icon(
+                  Icons.chevron_right_rounded,
+                  size: 17,
                   color: AppColors.textMuted,
                 ),
               ),
-            ),
-            Expanded(
-              flex: 4,
-              child: Text(
-                e.name,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.textDark,
-                ),
-              ),
-            ),
-            SizedBox(
-              width: 38,
-              child: Text(
-                Fmt.workUnits(summary.totalWorkUnits),
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                  fontSize: 13.5,
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.present,
-                ),
-              ),
-            ),
-            SizedBox(
-              width: 34,
-              child: Text(
-                '${summary.absentDays}',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 13.5,
-                  color: summary.absentDays > 0
-                      ? AppColors.absent
-                      : AppColors.textMuted,
-                ),
-              ),
-            ),
-            SizedBox(
-              width: 42,
-              child: Text(
-                Fmt.otHours(summary.overtimeMinutes),
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 13,
-                  color: summary.overtimeMinutes > 0
-                      ? AppColors.info
-                      : AppColors.textMuted,
-                ),
-              ),
-            ),
-            SizedBox(
-              width: 78,
-              child: Text(
-                Fmt.money(summary.totalPay),
-                textAlign: TextAlign.right,
-                style: const TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.textDark,
-                ),
-              ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

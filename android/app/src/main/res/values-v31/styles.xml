@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Android 12 trở lên dùng SplashScreen API: nền lấy từ thuộc tính
+         windowSplashScreenBackground, icon lấy từ icon app. Đặt cùng màu với
+         đỉnh dải gradient trong app để không loé màn trắng khi mở. -->
+    <style name="LaunchTheme" parent="@android:style/Theme.Light.NoTitleBar">
+        <item name="android:windowSplashScreenBackground">@color/splash_background</item>
+    </style>
+    <style name="NormalTheme" parent="@android:style/Theme.Light.NoTitleBar">
+        <item name="android:windowBackground">@color/splash_background</item>
+    </style>
+</resources>

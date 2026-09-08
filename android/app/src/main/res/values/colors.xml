@@ -1,4 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <color name="ic_launcher_background">#FFFFFF</color>
+    <!-- Nền màn chào của hệ thống: đúng màu đỉnh dải gradient trong app
+         (AppGradients.page) để lúc app khởi động không loé lên một màn trắng
+         rồi mới đổi màu. -->
+    <color name="splash_background">#E6FBF4</color>
 </resources>

@@ -86,7 +86,12 @@ class _SalarySettingsScreenState extends State<SalarySettingsScreen> {
               child: CircularProgressIndicator(color: AppColors.primary),
             )
           : ListView(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 28),
+              padding: EdgeInsets.fromLTRB(
+                16,
+                16,
+                16,
+                28 + MediaQuery.viewPaddingOf(context).bottom,
+              ),
               children: [
                 AppCard(
                   child: Column(
@@ -176,11 +181,9 @@ class _SalarySettingsScreenState extends State<SalarySettingsScreen> {
                           const SizedBox(height: 4),
                           for (final e in list)
                             InkWell(
-                              onTap: () => Navigator.of(context).push(
-                                MaterialPageRoute(
-                                  builder: (_) =>
-                                      EmployeeFormScreen(employee: e),
-                                ),
+                              onTap: () => pushScreen(
+                                context,
+                                EmployeeFormScreen(employee: e),
                               ),
                               child: Container(
                                 padding: const EdgeInsets.symmetric(

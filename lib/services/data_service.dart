@@ -2,29 +2,145 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../core/formatters.dart';
 import '../core/pay_period.dart';
+import '../models/app_review.dart';
 import '../models/app_settings.dart';
 import '../models/attendance_record.dart';
+import '../models/company.dart';
 import '../models/employee.dart';
 
 /// Toàn bộ truy cập Firestore của app.
 ///
-/// Cấu trúc dữ liệu tối giản đúng theo đặc tả:
-///   employees/{id}
-///   attendance/{employeeId}_{yyyy-MM-dd}
-///   settings/app
-///   app_user/main
+/// Mỗi cơ sở (một khách hàng) là một nhánh riêng, `companyId` **chính là uid
+/// Firebase của chủ cơ sở**:
+///   companies/{companyId}/employees/{id}
+///   companies/{companyId}/attendance/{employeeId}_{yyyy-MM-dd}
+///   companies/{companyId}/settings/app
+///   users/{uid}
+///
+/// Cách ly giữa các cơ sở là do **cấu trúc** chứ không do câu query: mọi
+/// truy cập đều đi qua [_root] nên không có cách nào quên lọc rồi lộ dữ liệu
+/// cơ sở khác. Xem `firestore.rules`.
 class DataService {
-  DataService._();
-  static final DataService instance = DataService._();
+  DataService._(this.companyId);
+
+  /// Dịch vụ của cơ sở đang đăng nhập. `companyId` do [AuthGate] gán ngay sau
+  /// khi đăng nhập và xoá về `null` khi đăng xuất.
+  static final DataService instance = DataService._(null);
+
+  /// Dịch vụ trỏ vào **một cơ sở khác** - chỉ dùng cho tài khoản tổng xem
+  /// báo cáo của khách. Rules chỉ cho tài khoản tổng đọc, mọi lệnh ghi qua
+  /// đây sẽ bị Firestore từ chối.
+  factory DataService.forCompany(String companyId) =>
+      DataService._(companyId);
+
+  /// Cơ sở đang mở. Gán `null` khi đăng xuất để phiên sau không còn trỏ vào
+  /// cơ sở cũ.
+  String? companyId;
 
   final FirebaseFirestore _db = FirebaseFirestore.instance;
 
+  /// Gốc dữ liệu của cơ sở đang mở.
+  ///
+  /// Chưa gán `companyId` mà đã đọc/ghi là lỗi lập trình - ném luôn cho thấy,
+  /// thà chết ở đây còn hơn ghi dữ liệu vào sai cơ sở.
+  DocumentReference<Map<String, dynamic>> get _root {
+    final id = companyId;
+    if (id == null) {
+      throw StateError(
+        'DataService chưa có companyId. Phải gán sau khi đăng nhập '
+        '(xem AuthGate) hoặc dùng DataService.forCompany(id).',
+      );
+    }
+    return _db.collection('companies').doc(id);
+  }
+
   CollectionReference<Map<String, dynamic>> get _employees =>
-      _db.collection('employees');
+      _root.collection('employees');
   CollectionReference<Map<String, dynamic>> get _attendance =>
-      _db.collection('attendance');
+      _root.collection('attendance');
   DocumentReference<Map<String, dynamic>> get _settings =>
-      _db.collection('settings').doc('app');
+      _root.collection('settings').doc('app');
+
+  // ------------------------------------------------------------------ Cơ sở
+
+  /// Tạo một cơ sở mới cùng thiết lập mặc định và hồ sơ người dùng.
+  ///
+  /// Ba document ghi trong **cùng một batch**: hoặc có đủ, hoặc không có gì.
+  /// Nửa vời (có cơ sở mà thiếu `settings/app`) thì app vẫn vào được nhưng
+  /// hiện dữ liệu rỗng mà người dùng không hiểu vì sao.
+  ///
+  /// [companyId] phải đúng bằng uid vừa tạo, nếu không rules sẽ chặn.
+  Future<void> createCompany({
+    required String companyId,
+    required String orgName,
+    required String account,
+  }) async {
+    final company = _db.collection('companies').doc(companyId);
+    final batch = _db.batch();
+    batch.set(company, {
+      'orgName': orgName,
+      'ownerAccount': account,
+      'active': true,
+      'createdAt': FieldValue.serverTimestamp(),
+    });
+    batch.set(
+      company.collection('settings').doc('app'),
+      AppSettings(orgName: orgName).toMap(),
+    );
+    batch.set(_db.collection('users').doc(companyId), {
+      'account': account,
+      'displayName': orgName,
+      'companyId': companyId,
+      'lastLoginAt': FieldValue.serverTimestamp(),
+    });
+    await batch.commit();
+  }
+
+  // --------------------------------------------------------------- Đánh giá
+
+  /// Lưu một lượt đánh giá app của cơ sở đang đăng nhập.
+  ///
+  /// Nằm trong `companies/{cid}/reviews` chứ không phải một collection riêng ở
+  /// gốc: nhánh con của cơ sở đã được `firestore.rules` cho phép sẵn (chủ ghi
+  /// được, tài khoản tổng đọc được) nên **không phải sửa và Publish lại rules**.
+  ///
+  /// Mỗi lượt gửi là một document mới, không ghi đè lượt trước - đọc lại thấy
+  /// được cả quá trình khách đổi ý, mà cũng không cần chống trùng như bản ghi
+  /// công.
+  Future<void> saveReview({
+    required int stars,
+    required String comment,
+    required String appVersion,
+  }) => _root.collection('reviews').add({
+    'stars': stars.clamp(1, 5),
+    'comment': comment.trim(),
+    'appVersion': appVersion,
+    'createdAt': FieldValue.serverTimestamp(),
+  });
+
+  /// Lượt đánh giá gần nhất của cơ sở, `null` nếu chưa có.
+  ///
+  /// `orderBy` + `limit` trên đúng một trường nên không đòi composite index.
+  Future<AppReview?> latestReview() async {
+    final snap = await _root
+        .collection('reviews')
+        .orderBy('createdAt', descending: true)
+        .limit(1)
+        .get();
+    if (snap.docs.isEmpty) return null;
+    return AppReview.fromDoc(snap.docs.first);
+  }
+
+  /// Toàn bộ cơ sở - chỉ tài khoản tổng đọc được (rules chặn người thường).
+  ///
+  /// Sắp xếp ở client cho khỏi phụ thuộc `orderBy`: cơ sở nào thiếu `orgName`
+  /// thì `orderBy` sẽ bỏ qua luôn, mà đó chính là cơ sở đang có vấn đề.
+  Stream<List<Company>> watchCompanies() =>
+      _db.collection('companies').snapshots().map((snap) {
+        final list = snap.docs.map(Company.fromDoc).toList();
+        list.sort((a, b) => _vnCompare(a.orgName, b.orgName));
+        return list;
+      });
 
   // ---------------------------------------------------------------- Nhân viên
 
@@ -188,6 +304,22 @@ class DataService {
     return snap.docs.map(AttendanceRecord.fromDoc).toList();
   }
 
+  /// Bản ghi công trong một khoảng ngày bất kỳ, đọc một lần.
+  ///
+  /// Dùng cho biểu đồ quỹ lương theo quý / theo năm: cần gộp nhiều kỳ liên
+  /// tiếp nên đọc trọn khoảng rồi chia nhóm ở client. Vẫn chỉ là range trên
+  /// đúng một trường `workDate` nên không đòi composite index.
+  Future<List<AttendanceRecord>> getRecordsBetween(
+    DateTime start,
+    DateTime end,
+  ) async {
+    final snap = await _attendance
+        .where('workDate', isGreaterThanOrEqualTo: Fmt.dateKey(start))
+        .where('workDate', isLessThanOrEqualTo: Fmt.dateKey(end))
+        .get();
+    return snap.docs.map(AttendanceRecord.fromDoc).toList();
+  }
+
   /// Bản ghi công của một nhân viên trong một kỳ, mới nhất lên đầu.
   ///
   /// Lọc nhân viên ở phía client thay vì thêm điều kiện `employeeId` vào query
@@ -249,6 +381,21 @@ class DataService {
         otRate: e.otRate,
       );
     }).toList();
+  }
+
+  /// Tổng quỹ lương của một nhóm bản ghi công.
+  ///
+  /// Dùng cho biểu đồ quỹ lương theo quý / năm: mỗi kỳ gọi một lần rồi cộng
+  /// dồn. Tự gộp cả người đã nghỉ mà còn công trong nhóm đó (luật §0.7).
+  static double totalPayrollOf(
+    List<Employee> all,
+    List<AttendanceRecord> records,
+  ) {
+    var total = 0.0;
+    for (final s in summarize(employeesForExport(all, records), records)) {
+      total += s.totalPay;
+    }
+    return total;
   }
 
   // ------------------------------------------------------------- Thiết lập

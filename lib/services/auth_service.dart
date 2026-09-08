@@ -2,10 +2,15 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-/// App chỉ có MỘT tài khoản sử dụng - không có role, không có permission.
+import 'data_service.dart';
+
+/// Đăng nhập / đăng ký. **Mỗi tài khoản là chủ của đúng một cơ sở**, và
+/// `companyId` của cơ sở đó chính là `uid` của tài khoản (xem
+/// `firestore.rules` và [DataService]).
 ///
-/// Người dùng nhập "Tài khoản" (ví dụ: admin). Nếu chuỗi nhập không phải
-/// email thì tự ghép thêm hậu tố nội bộ để dùng với Firebase Auth.
+/// Người dùng đăng ký bằng email thật để tự đặt lại được mật khẩu. Tài khoản
+/// kiểu cũ không có `@` (ví dụ `admin`) vẫn đăng nhập được: [normalizeAccount]
+/// ghép hậu tố nội bộ như trước.
 class AuthService {
   AuthService._();
   static final AuthService instance = AuthService._();
@@ -14,14 +19,30 @@ class AuthService {
   static const _kRemember = 'remember_login';
   static const _kLastAccount = 'last_account';
 
+  /// Giá trị `role` của tài khoản tổng trong `users/{uid}`.
+  ///
+  /// Chỉ để UI biết có hiện menu "Quản lý cơ sở" hay không - chặn thật nằm ở
+  /// `firestore.rules` (danh sách uid trong `isSuperAdmin()`). Client tự sửa
+  /// `role` thì rules vẫn không cho đọc thêm gì.
+  static const superRole = 'super';
+
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _db = FirebaseFirestore.instance;
 
   User? get currentUser => _auth.currentUser;
   Stream<User?> get authState => _auth.authStateChanges();
 
-  DocumentReference<Map<String, dynamic>> get _userDoc =>
-      _db.collection('app_user').doc('main');
+  /// Hồ sơ người dùng: `users/{uid}`. Thay cho `app_user/main` của bản
+  /// một-tài-khoản.
+  DocumentReference<Map<String, dynamic>> get _userDoc {
+    final uid = _auth.currentUser?.uid;
+    if (uid == null) throw const AuthFailure('Chưa đăng nhập.');
+    return _db.collection('users').doc(uid);
+  }
+
+  /// Tài khoản đang đăng nhập có phải tài khoản tổng không.
+  static bool isSuperAccount(Map<String, dynamic> profile) =>
+      profile['role'] == superRole;
 
   static String normalizeAccount(String input) {
     final v = input.trim();
@@ -61,10 +82,11 @@ class AuthService {
     }
   }
 
-  /// Đăng nhập tài khoản duy nhất.
+  /// Đăng nhập vào cơ sở của tài khoản này.
   ///
-  /// Lần chạy đầu tiên (chưa có tài khoản nào trong hệ thống) sẽ tự tạo
-  /// tài khoản này để người dùng không phải vào Firebase Console.
+  /// **Cố ý KHÔNG tự tạo tài khoản khi đăng nhập** như bản một-tài-khoản
+  /// trước đây: giờ mỗi tài khoản là một cơ sở riêng, gõ sai email một lần là
+  /// sinh ra một cơ sở rỗng. Muốn có cơ sở mới thì đi qua [registerCompany].
   Future<void> signIn({
     required String account,
     required String password,
@@ -77,51 +99,68 @@ class AuthService {
         password: password,
       );
     } on FirebaseAuthException catch (e) {
-      final maybeFirstRun = e.code == 'user-not-found' ||
-          e.code == 'invalid-credential' ||
-          e.code == 'INVALID_LOGIN_CREDENTIALS';
-      if (!maybeFirstRun) throw AuthFailure(_message(e));
-      await _createFirstAccount(email, password);
+      throw AuthFailure(_message(e));
     }
 
+    // Không ghi `displayName` ở đây: người dùng đã tự đặt tên hiển thị thì
+    // mỗi lần đăng nhập lại ghi đè về tên tài khoản là mất công họ sửa.
     await _userDoc.set({
       'account': email,
-      'displayName': displayAccount(email),
+      'companyId': _auth.currentUser!.uid,
       'lastLoginAt': FieldValue.serverTimestamp(),
     }, SetOptions(merge: true));
 
     await _saveRemember(remember, account.trim());
   }
 
-  /// Tạo tài khoản duy nhất ở lần chạy đầu tiên.
+  /// Tạo tài khoản mới **và** cơ sở của tài khoản đó.
   ///
-  /// Không thể hỏi Firestore trước khi đăng nhập (rules chặn khi chưa có auth),
-  /// nên thứ tự là: tạo tài khoản -> lúc này đã có auth -> mới kiểm tra xem app
-  /// đã có chủ chưa. Nếu đã có thì huỷ luôn tài khoản vừa tạo.
-  Future<void> _createFirstAccount(String email, String password) async {
+  /// Thứ tự buộc phải là: tạo tài khoản Auth trước (để có `uid` và để rules
+  /// cho ghi), rồi mới ghi dữ liệu cơ sở. Nếu bước ghi thất bại thì xoá luôn
+  /// tài khoản vừa tạo - thà không có gì còn hơn để lại một tài khoản đăng
+  /// nhập được nhưng không có cơ sở nào.
+  ///
+  /// Cần mạng: `createUserWithEmailAndPassword` không chạy offline được. Sau
+  /// khi có tài khoản rồi thì chấm công offline vẫn bình thường.
+  Future<void> registerCompany({
+    required String orgName,
+    required String email,
+    required String password,
+    required bool remember,
+  }) async {
+    final mail = normalizeAccount(email);
+    final name = orgName.trim();
+
+    final UserCredential cred;
     try {
-      await _auth.createUserWithEmailAndPassword(
-        email: email,
+      cred = await _auth.createUserWithEmailAndPassword(
+        email: mail,
         password: password,
       );
     } on FirebaseAuthException catch (e) {
-      // Tài khoản đã tồn tại nghĩa là bước đăng nhập ở trên sai mật khẩu.
-      if (e.code == 'email-already-in-use') {
-        throw const AuthFailure('Sai tài khoản hoặc mật khẩu.');
-      }
       throw AuthFailure(_message(e));
     }
 
-    final existing = await _userDoc.get();
-    final owner = existing.data()?['account'] as String?;
-    if (existing.exists && owner != null && owner != email) {
-      // App đã có tài khoản khác -> giữ nguyên tài khoản cũ.
-      await _auth.currentUser?.delete();
-      throw AuthFailure(
-        'App đã có tài khoản "${displayAccount(owner)}". '
-        'Hãy đăng nhập bằng tài khoản đó.',
+    final user = cred.user!;
+    try {
+      // companyId = uid của chủ, đúng quy ước của firestore.rules.
+      await DataService.instance.createCompany(
+        companyId: user.uid,
+        orgName: name,
+        account: mail,
       );
+    } catch (e) {
+      await user.delete().catchError((_) {});
+      throw AuthFailure('Không tạo được cơ sở: $e');
     }
+
+    // Gửi mail xác minh nhưng KHÔNG chặn dùng app: chặn thì mạng kém một lát
+    // là khách không vào được app dù đã trả tiền.
+    try {
+      await user.sendEmailVerification();
+    } catch (_) {}
+
+    await _saveRemember(remember, mail);
   }
 
   Future<void> updateDisplayName(String name) async {

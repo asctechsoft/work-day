@@ -104,7 +104,12 @@ class _AccountScreenState extends State<AccountScreen> {
               child: CircularProgressIndicator(color: AppColors.primary),
             )
           : ListView(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 28),
+              padding: EdgeInsets.fromLTRB(
+                16,
+                16,
+                16,
+                28 + MediaQuery.viewPaddingOf(context).bottom,
+              ),
               children: [
                 AppCard(
                   child: Column(
@@ -134,8 +139,8 @@ class _AccountScreenState extends State<AccountScreen> {
                       ),
                       const SizedBox(height: 8),
                       const Text(
-                        'App chỉ dùng một tài khoản duy nhất, không có phân '
-                        'quyền và không có nhiều người dùng.',
+                        'Mỗi cơ sở dùng một tài khoản riêng. Trong cơ sở không '
+                        'có phân quyền, không có nhiều người dùng.',
                         style: TextStyle(
                           fontSize: 12.5,
                           color: AppColors.textMuted,

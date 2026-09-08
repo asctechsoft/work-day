@@ -77,6 +77,12 @@ class PayPeriod {
   /// Nhãn đầy đủ dùng trong file xuất ra.
   String get fullRangeLabel => '${Fmt.date(start)} - ${Fmt.date(end)}';
 
+  /// Quý (1..4) mà kỳ này thuộc về, tính theo tháng chốt kỳ.
+  ///
+  /// Kỳ 26/08 - 25/09 thuộc quý 3 vì nó chốt trong tháng 9 - cùng quy ước với
+  /// [title]: kỳ luôn thuộc về tháng mà nó kết thúc.
+  int get quarter => ((anchor.month - 1) ~/ 3) + 1;
+
   /// Số ngày trong kỳ.
   int get dayCount => end.difference(start).inDays + 1;
 

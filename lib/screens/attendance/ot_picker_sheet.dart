@@ -4,7 +4,7 @@ import 'package:flutter/services.dart';
 import '../../core/formatters.dart';
 import '../../core/theme.dart';
 
-/// Bottom sheet chọn số giờ tăng ca: 0.5h / 1h / 1.5h / 2h / Nhập khác.
+/// Bottom sheet chọn tăng ca: 30p / 1h / 1h30 / 2h / Nhập khác (theo phút).
 ///
 /// Trả về số phút OT, hoặc null nếu người dùng bấm Huỷ.
 Future<int?> showOtPicker(
@@ -54,7 +54,7 @@ class _OtPickerSheet extends StatelessWidget {
             ),
             const SizedBox(height: 16),
             const Text(
-              'Chọn giờ tăng ca',
+              'Chọn tăng ca',
               style: TextStyle(
                 fontSize: 17,
                 fontWeight: FontWeight.w700,
@@ -77,7 +77,7 @@ class _OtPickerSheet extends StatelessWidget {
             for (final m in presets)
               _option(
                 context,
-                label: Fmt.otHours(m).replaceAll('h', ' giờ'),
+                label: Fmt.otHours(m),
                 value: m,
                 selected: currentMinutes == m,
               ),
@@ -188,7 +188,7 @@ class _CustomButton extends StatelessWidget {
 
   Future<int?> _askCustom(BuildContext context, int current) {
     final controller = TextEditingController(
-      text: current > 0 ? (current / 60).toStringAsFixed(1) : '',
+      text: current > 0 ? '$current' : '',
     );
     return showDialog<int>(
       context: context,
@@ -198,24 +198,33 @@ class _CustomButton extends StatelessWidget {
           borderRadius: BorderRadius.circular(16),
         ),
         title: const Text(
-          'Nhập giờ tăng ca',
+          'Nhập số phút tăng ca',
           style: TextStyle(
             fontSize: 17,
             fontWeight: FontWeight.w700,
             color: AppColors.textDark,
           ),
         ),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          keyboardType: const TextInputType.numberWithOptions(decimal: true),
-          inputFormatters: [
-            FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]')),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            TextField(
+              controller: controller,
+              autofocus: true,
+              keyboardType: TextInputType.number,
+              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+              decoration: const InputDecoration(
+                hintText: 'Ví dụ: 90',
+                suffixText: 'phút',
+              ),
+            ),
+            const SizedBox(height: 10),
+            const Text(
+              'Nhập theo phút: 30 phút gõ 30, một tiếng rưỡi gõ 90.',
+              style: TextStyle(fontSize: 12.5, color: AppColors.textMuted),
+            ),
           ],
-          decoration: const InputDecoration(
-            hintText: 'Ví dụ: 2.5',
-            suffixText: 'giờ',
-          ),
         ),
         actions: [
           TextButton(
@@ -225,15 +234,15 @@ class _CustomButton extends StatelessWidget {
           ),
           TextButton(
             onPressed: () {
-              final raw = controller.text.trim().replaceAll(',', '.');
-              final hours = double.tryParse(raw);
-              if (hours == null || hours < 0) {
+              final raw = controller.text.trim();
+              final minutes = int.tryParse(raw);
+              if (minutes == null || minutes < 0) {
                 Navigator.of(ctx).pop();
                 return;
               }
               // Làm tròn về mốc 5 phút, tối đa 24 giờ.
-              final minutes = (hours * 60).round().clamp(0, 24 * 60);
-              Navigator.of(ctx).pop((minutes / 5).round() * 5);
+              final capped = minutes.clamp(0, 24 * 60);
+              Navigator.of(ctx).pop((capped / 5).round() * 5);
             },
             child: const Text('Xong'),
           ),

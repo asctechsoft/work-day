@@ -1,39 +1,64 @@
 rules_version = '2';
 
-// WorkDay - app chấm công & tính lương, 1 tài khoản duy nhất.
+// WorkDay - MỖI TÀI KHOẢN CHỦ = MỘT CƠ SỞ.
 //
 // Cách áp dụng:
 //   Firebase Console > Firestore Database > Rules > dán nội dung này > Publish.
 //
-// Vì app không có phân quyền, chỉ cần một điều kiện: đã đăng nhập.
+// Cấu trúc:
+//   companies/{companyId}/employees/{id}
+//   companies/{companyId}/attendance/{employeeId}_{yyyy-MM-dd}
+//   companies/{companyId}/settings/app
+//   users/{uid}
+//
+// `companyId` LUÔN bằng `uid` của chủ cơ sở. Nhờ vậy rules chỉ so hai chuỗi,
+// không phải `get()` document nào - tức là không tốn thêm read cho mỗi lượt
+// đọc/ghi. Cách ly giữa các cơ sở là do CẤU TRÚC, không do câu query, nên
+// client có quên lọc cũng không lọt sang dữ liệu cơ sở khác.
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    function signedIn() {
-      return request.auth != null;
+    function isMe(id) {
+      return request.auth != null && request.auth.uid == id;
     }
 
-    // Tài khoản duy nhất của app.
-    match /app_user/{docId} {
-      allow read, write: if signedIn();
+    // Tài khoản tổng: xem được mọi cơ sở, KHÔNG ghi được gì.
+    // Thêm/bớt người thì sửa danh sách uid này rồi Publish lại rules.
+    function isSuperAdmin() {
+      return request.auth != null
+          && request.auth.uid in ['DAN_UID_CUA_MAY_VAO_DAY'];
     }
 
-    // Hồ sơ nhân viên + lương/ngày + đơn giá tăng ca.
-    match /employees/{employeeId} {
-      allow read, write: if signedIn();
+    match /companies/{companyId} {
+      allow read: if isMe(companyId) || isSuperAdmin();
+      // Chỉ tạo được cơ sở mang đúng uid của mình -> một tài khoản tối đa
+      // một cơ sở, và không ai tạo hộ ai được.
+      allow create: if isMe(companyId);
+      allow update: if isMe(companyId);
+      allow delete: if false;
+
+      // employees, attendance, settings đều nằm dưới đây.
+      match /{document=**} {
+        allow read: if isMe(companyId) || isSuperAdmin();
+        allow write: if isMe(companyId);
+      }
     }
 
-    // Một bản ghi cho mỗi nhân viên / ngày.
-    match /attendance/{recordId} {
-      allow read, write: if signedIn();
+    match /users/{uid} {
+      allow read: if isMe(uid) || isSuperAdmin();
+      // Không cho client tự phong mình làm tài khoản tổng: `role` chỉ được
+      // đặt bằng tay trong Console. Client có sửa được `role` thì UI hiện
+      // thêm menu nhưng rules ở trên vẫn chặn, nên vẫn không đọc được gì.
+      allow create: if isMe(uid)
+          && !request.resource.data.keys().hasAny(['role']);
+      allow update: if isMe(uid)
+          && !request.resource.data.diff(resource.data)
+                .affectedKeys().hasAny(['role']);
+      allow delete: if false;
     }
 
-    // Thiết lập chung.
-    match /settings/{docId} {
-      allow read, write: if signedIn();
-    }
-
-    // Mọi thứ khác đều bị chặn.
+    // Mọi thứ khác đều bị chặn - kể cả 4 collection cũ ở gốc
+    // (employees, attendance, settings, app_user) từ bản một-tài-khoản.
     match /{document=**} {
       allow read, write: if false;
     }

@@ -300,7 +300,7 @@ class ExportService {
   static String _dayMark(AttendanceRecord r) {
     final base = r.status.exportMark;
     if (r.overtimeMinutes <= 0) return base;
-    final hours = Fmt.otHours(r.overtimeMinutes).replaceAll('h', '');
+    final hours = Fmt.otHoursDecimal(r.overtimeMinutes);
     return '$base+$hours';
   }
 

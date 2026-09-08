@@ -43,3 +43,8 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Service account cua Firebase Admin SDK (dung cho tools/migrate_to_company.js).
+# TUYET DOI khong commit: ai co file nay la doc/ghi duoc toan bo du lieu khach.
+*service-account*.json
+*firebase-adminsdk*.json

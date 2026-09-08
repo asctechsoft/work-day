@@ -307,7 +307,7 @@ Future<void> showAttendanceHelp(BuildContext context) {
               'Chạm vào ô trạng thái để đổi nhanh giữa Đi làm và Nghỉ.',
             ),
             const _Bullet(
-              'Chạm vào nút ⋯ cạnh tên nhân viên để chọn Nửa công hoặc bỏ '
+              'Chạm vào nút mũi tên ⌄ ở cuối dòng để chọn Nửa công hoặc bỏ '
               'chấm công nếu lỡ bấm nhầm.',
             ),
             const _Bullet(

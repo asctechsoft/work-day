@@ -4,8 +4,9 @@ import '../core/theme.dart';
 import '../services/auth_service.dart';
 import '../widgets/common.dart';
 import 'intro_screen.dart';
+import 'register_screen.dart';
 
-/// Đăng nhập tài khoản duy nhất của app.
+/// Đăng nhập vào cơ sở của tài khoản này (mỗi cơ sở một tài khoản riêng).
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
 
@@ -76,8 +77,8 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.surface,
-      appBar: AppBar(backgroundColor: AppColors.surface, elevation: 0),
+      backgroundColor: Colors.transparent,
+      appBar: AppBar(backgroundColor: Colors.transparent, elevation: 0),
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.fromLTRB(28, 8, 28, 32),
@@ -112,15 +113,16 @@ class _LoginScreenState extends State<LoginScreen> {
                   controller: _account,
                   autocorrect: false,
                   textInputAction: TextInputAction.next,
+                  keyboardType: TextInputType.emailAddress,
                   decoration: const InputDecoration(
-                    hintText: 'Tài khoản',
+                    hintText: 'Email',
                     prefixIcon: Icon(
-                      Icons.person_outline_rounded,
+                      Icons.mail_outline_rounded,
                       color: AppColors.textMuted,
                     ),
                   ),
                   validator: (v) => (v == null || v.trim().isEmpty)
-                      ? 'Vui lòng nhập tài khoản'
+                      ? 'Vui lòng nhập email'
                       : null,
                 ),
                 const SizedBox(height: 14),
@@ -229,14 +231,34 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                 ),
 
-                const SizedBox(height: 20),
+                const SizedBox(height: 16),
                 const Center(
                   child: Text(
-                    'Chỉ 1 tài khoản sử dụng cho toàn bộ app',
+                    'Mỗi cơ sở dùng một tài khoản riêng',
                     style: TextStyle(color: AppColors.textMuted, fontSize: 12.5),
                   ),
                 ),
-                const SizedBox(height: 6),
+                const SizedBox(height: 10),
+                OutlinedButton.icon(
+                  onPressed: _busy
+                      ? null
+                      : () => pushScreen(context, const RegisterScreen()),
+                  icon: const Icon(Icons.add_business_outlined, size: 20),
+                  label: const Text('Tạo cơ sở mới'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppColors.primary,
+                    minimumSize: const Size.fromHeight(48),
+                    side: const BorderSide(color: AppColors.border),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    textStyle: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 2),
                 Center(
                   child: TextButton(
                     onPressed: _busy ? null : _showFirstRunHelp,
@@ -258,23 +280,31 @@ class _LoginScreenState extends State<LoginScreen> {
     showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
-      builder: (_) => Padding(
-        padding: const EdgeInsets.fromLTRB(20, 0, 20, 28),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: const [
-            SectionTitle('Lần đầu sử dụng'),
-            SizedBox(height: 12),
-            Text(
-              'App chỉ dùng một tài khoản duy nhất.\n\n'
-              'Lần đăng nhập đầu tiên, hãy nhập tài khoản và mật khẩu '
-              'bạn muốn dùng lâu dài (mật khẩu tối thiểu 6 ký tự). '
-              'App sẽ tự tạo tài khoản đó cho cơ sở của bạn.\n\n'
-              'Những lần sau chỉ cần đăng nhập bằng đúng thông tin này.',
-              style: TextStyle(height: 1.55, color: AppColors.textBody),
-            ),
-          ],
+      isScrollControlled: true,
+      // `SafeArea` + cuộn được, y như `showAttendanceHelp`: bảng chọn của
+      // Material KHÔNG tự tránh thanh điều hướng Android, nên dòng cuối bị
+      // thanh đó đè lên - người dùng phản hồi "lỗi đè lên này thấp quá".
+      builder: (_) => SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(20, 0, 20, 28),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: const [
+              SectionTitle('Lần đầu sử dụng'),
+              SizedBox(height: 12),
+              Text(
+                'Mỗi cơ sở có một tài khoản riêng, dữ liệu chấm công của các '
+                'cơ sở tách biệt hoàn toàn.\n\n'
+                'Chưa có cơ sở thì bấm "Tạo cơ sở mới": nhập tên cơ sở, email '
+                'của bạn và mật khẩu (tối thiểu 6 ký tự). Lần tạo này cần có '
+                'mạng.\n\n'
+                'Đã có cơ sở thì đăng nhập bằng email và mật khẩu đó. Muốn đổi '
+                'mật khẩu thì vào Cài đặt > Thông tin tài khoản.',
+                style: TextStyle(height: 1.55, color: AppColors.textBody),
+              ),
+            ],
+          ),
         ),
       ),
     );

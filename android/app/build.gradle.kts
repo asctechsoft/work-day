@@ -21,7 +21,8 @@ android {
     }
 
     defaultConfig {
-        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
+        // applicationId thật do flavor quyết định (xem productFlavors) — mỗi
+        // flavor trỏ về một Firebase project khác nhau nên KHÔNG được trùng id.
         applicationId = "com.campany.tickgo"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
@@ -29,6 +30,34 @@ android {
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+        manifestPlaceholders["appLabel"] = "WorkDay"
+    }
+
+    // HAI MÔI TRƯỜNG, HAI FIREBASE PROJECT — đừng gộp lại.
+    //
+    //   dev     → project dev-asc (android/app/src/dev/google-services.json)
+    //   product → project tick-go (android/app/google-services.json) = DỮ LIỆU THẬT
+    //
+    // Plugin google-services đọc file trong src/<flavor>/ trước, không thấy thì
+    // mới lấy file ở gốc android/app/ — nên bản dev tự lấy dev-asc, bản product
+    // lấy file gốc. `applicationId` phải khớp ĐÚNG `package_name` khai trong
+    // google-services.json của project tương ứng, lệch một ký tự là Gradle báo
+    // "No matching client found for package name".
+    //
+    // Hai applicationId khác nhau ⇒ cài song song được cả 2 app trên cùng máy,
+    // dữ liệu/đăng nhập tách hẳn.
+    flavorDimensions += "env"
+    productFlavors {
+        create("dev") {
+            dimension = "env"
+            applicationId = "dev.asctechsoft"
+            manifestPlaceholders["appLabel"] = "WorkDay Dev"
+        }
+        create("product") {
+            dimension = "env"
+            applicationId = "com.campany.tickgo"
+            manifestPlaceholders["appLabel"] = "WorkDay"
+        }
     }
 
     buildTypes {

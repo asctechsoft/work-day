@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../core/theme.dart';
+import '../widgets/common.dart';
 import 'login_screen.dart';
 
 /// Màn hình mở app: logo + tên + nút "Bắt đầu".
@@ -10,7 +11,8 @@ class IntroScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.surface,
+      // Trong suốt để dùng nền gradient chung của app (AppGradients.page).
+      backgroundColor: Colors.transparent,
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.fromLTRB(28, 24, 28, 28),
@@ -35,9 +37,7 @@ class IntroScreen extends StatelessWidget {
               ),
               const Spacer(flex: 4),
               ElevatedButton(
-                onPressed: () => Navigator.of(context).push(
-                  MaterialPageRoute(builder: (_) => const LoginScreen()),
-                ),
+                onPressed: () => pushScreen(context, const LoginScreen()),
                 child: const Text('Bắt đầu'),
               ),
               const SizedBox(height: 16),
