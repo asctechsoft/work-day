@@ -116,6 +116,7 @@ class _CompanyReportScreenState extends State<CompanyReportScreen> {
         orgName: _settings.orgName.isEmpty
             ? widget.company.orgName
             : _settings.orgName,
+        workHoursPerDay: _settings.workHoursPerDay,
       );
     } catch (e) {
       if (mounted) showToast(context, 'Không xuất được file: $e', error: true);

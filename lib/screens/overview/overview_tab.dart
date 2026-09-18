@@ -101,6 +101,7 @@ class _OverviewTabState extends State<OverviewTab> {
         employees: employees,
         records: records,
         orgName: _settings.orgName,
+        workHoursPerDay: _settings.workHoursPerDay,
       );
     } catch (e) {
       if (mounted) showToast(context, 'Không xuất được file: $e', error: true);
@@ -270,6 +271,7 @@ class _OverviewTabState extends State<OverviewTab> {
             employees: employees,
             summaries: summaries,
             period: period,
+            workHoursPerDay: _settings.workHoursPerDay,
           ),
           const SizedBox(height: 14),
           // "Đáng chú ý" nằm ngay dưới bảng lương: cùng là chuyện so sánh
@@ -409,11 +411,13 @@ class _SummaryTable extends StatelessWidget {
   final List<Employee> employees;
   final List<MonthlySummary> summaries;
   final PayPeriod period;
+  final int workHoursPerDay;
 
   const _SummaryTable({
     required this.employees,
     required this.summaries,
     required this.period,
+    required this.workHoursPerDay,
   });
 
   @override
@@ -487,7 +491,11 @@ class _SummaryTable extends StatelessWidget {
       child: InkWell(
         onTap: () => pushScreen(
           context,
-          EmployeeMonthScreen(employee: e, period: period),
+          EmployeeMonthScreen(
+            employee: e,
+            period: period,
+            workHoursPerDay: workHoursPerDay,
+          ),
         ),
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),

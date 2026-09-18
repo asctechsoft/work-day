@@ -17,6 +17,9 @@ class AttendanceRow extends StatelessWidget {
   final Employee employee;
   final AttendanceRecord? record;
   final bool locked;
+
+  /// Quy đổi công Tuỳ chỉnh ra giờ để hiện trên chip (xem [Fmt.customWorkHours]).
+  final int workHoursPerDay;
   final VoidCallback onToggleStatus;
   final VoidCallback onEditOvertime;
   final VoidCallback onPickStatus;
@@ -27,6 +30,7 @@ class AttendanceRow extends StatelessWidget {
     required this.employee,
     required this.record,
     required this.locked,
+    required this.workHoursPerDay,
     required this.onToggleStatus,
     required this.onEditOvertime,
     required this.onPickStatus,
@@ -41,8 +45,17 @@ class AttendanceRow extends StatelessWidget {
       AttendanceStatus.present => (AppColors.present, AppColors.presentSoft),
       AttendanceStatus.half => (AppColors.info, AppColors.infoSoft),
       AttendanceStatus.absent => (AppColors.absent, AppColors.absentSoft),
+      AttendanceStatus.custom => (AppColors.custom, AppColors.customSoft),
       AttendanceStatus.none => (AppColors.textMuted, AppColors.background),
     };
+
+    // Nửa công đã có số cố định (0,5) ngay trong tên nên không cần viết
+    // thêm; Tuỳ chỉnh thì mỗi ngày một số khác nhau, phải viết ra chip mới
+    // biết đang chấm bao nhiêu - viết theo **giờ**, không theo công, để
+    // không bị nhầm với số ngày công.
+    final statusText = status == AttendanceStatus.custom
+        ? Fmt.customWorkHours(record?.workUnits ?? 0, workHoursPerDay)
+        : status.label;
 
     final radius = BorderRadius.circular(14);
 
@@ -99,7 +112,7 @@ class AttendanceRow extends StatelessWidget {
                 ),
               ),
               TagChip(
-                text: status.label,
+                text: statusText,
                 color: statusColor,
                 background: statusBg,
                 onTap: locked ? null : onToggleStatus,

@@ -15,10 +15,14 @@ class EmployeeMonthScreen extends StatefulWidget {
   final Employee employee;
   final PayPeriod period;
 
+  /// Quy đổi công Tuỳ chỉnh ra giờ khi hiện lịch sử từng ngày.
+  final int workHoursPerDay;
+
   const EmployeeMonthScreen({
     super.key,
     required this.employee,
     required this.period,
+    required this.workHoursPerDay,
   });
 
   @override
@@ -276,8 +280,12 @@ class _EmployeeMonthScreenState extends State<EmployeeMonthScreen> {
       AttendanceStatus.present => AppColors.present,
       AttendanceStatus.half => AppColors.info,
       AttendanceStatus.absent => AppColors.absent,
+      AttendanceStatus.custom => AppColors.custom,
       AttendanceStatus.none => AppColors.textMuted,
     };
+    final statusLabel = r.status == AttendanceStatus.custom
+        ? '${r.status.label} · ${Fmt.customWorkHours(r.workUnits, widget.workHoursPerDay)}'
+        : r.status.label;
 
     return InkWell(
       onTap: () => _editDay(day),
@@ -301,7 +309,7 @@ class _EmployeeMonthScreenState extends State<EmployeeMonthScreen> {
             ),
             Expanded(
               child: Text(
-                r.status.label,
+                statusLabel,
                 style: TextStyle(
                   fontSize: 13.5,
                   fontWeight: FontWeight.w600,

@@ -2,12 +2,14 @@ import 'package:flutter/material.dart';
 
 import '../../core/theme.dart';
 import '../../services/auth_service.dart';
+import '../../services/remote_config_service.dart';
 import '../../widgets/common.dart';
 import '../admin/company_list_screen.dart';
 import 'about_screen.dart';
 import 'account_screen.dart';
 import 'employee_list_screen.dart';
 import 'general_settings_screen.dart';
+import 'iap_screen.dart';
 import 'review_screen.dart';
 import 'salary_settings_screen.dart';
 
@@ -24,8 +26,8 @@ class _SettingsTabState extends State<SettingsTab> {
   ///
   /// Dựng một lần trong `State`: `watchAccount()` tạo stream mới mỗi lần gọi,
   /// để trong `build` là mỗi lần vẽ lại một lần đăng ký nghe.
-  late final Stream<Map<String, dynamic>> _profile = AuthService.instance
-      .watchAccount();
+  late final Stream<Map<String, dynamic>> _profile =
+      AuthService.instance.watchAccount();
 
   @override
   Widget build(BuildContext context) {
@@ -33,8 +35,7 @@ class _SettingsTabState extends State<SettingsTab> {
       stream: _profile,
       builder: (context, snap) {
         // Lỗi đọc (vừa đăng xuất chẳng hạn) thì coi như tài khoản thường.
-        final isSuper =
-            snap.hasData && AuthService.isSuperAccount(snap.data!);
+        final isSuper = snap.hasData && AuthService.isSuperAccount(snap.data!);
         return _buildBody(context, isSuper);
       },
     );
@@ -68,7 +69,7 @@ class _SettingsTabState extends State<SettingsTab> {
             color: AppColors.present,
             title: 'Danh sách nhân viên',
             subtitle: 'Thêm, sửa, ngừng sử dụng nhân viên',
-            onTap: () => _open(context, const EmployeeListScreen()),
+            onTap: () => _openEmployeeList(context),
           ),
           _SettingItem(
             icon: Icons.payments_outlined,
@@ -88,8 +89,10 @@ class _SettingsTabState extends State<SettingsTab> {
             icon: Icons.star_outline_rounded,
             color: AppColors.overtime,
             title: 'Đánh giá ứng dụng',
-            subtitle: 'Cho sao và góp ý để app tốt hơn',
-            onTap: () => _open(context, const ReviewScreen()),
+            subtitle: 'Cho 5 sao nếu thấy app hữu ích',
+            // Dialog nổi trên chính màn này, không đẩy sang màn mới - xem
+            // showReviewDialog() trong review_screen.dart.
+            onTap: () => showReviewDialog(context),
           ),
           _SettingItem(
             icon: Icons.info_outline_rounded,
@@ -130,6 +133,18 @@ class _SettingsTabState extends State<SettingsTab> {
 
   void _open(BuildContext context, Widget screen) {
     pushScreen(context, screen);
+  }
+
+  // Đẩy Danh sách nhân viên trước, rồi đẩy màn Nâng cấp gói chồng lên trên -
+  // bấm X ở đó chỉ pop, lộ ra Danh sách nhân viên đã có sẵn dưới, không quay
+  // thẳng về Cài đặt (xem IapScreen). Cờ `iapEnabled` tắt (mặc định) thì bỏ
+  // qua màn IAP, vào thẳng danh sách như bản một-tài-khoản - đổi trên
+  // Remote Config Console, không cần build lại app.
+  void _openEmployeeList(BuildContext context) {
+    pushScreen(context, const EmployeeListScreen());
+    if (RemoteConfigService.instance.iapEnabled) {
+      pushScreen(context, const IapScreen());
+    }
   }
 
   Future<void> _confirmSignOut(BuildContext context) async {

@@ -29,14 +29,31 @@ kể cả khi thấy "thêm cái này thì hay hơn".
    > `DataService._root` nên không có chỗ nào để quên lọc `companyId`.
 3. **Một nhân viên chỉ có một bản ghi công cho một ngày.** Chấm lại = ghi đè
    document cũ, tuyệt đối không tạo bản ghi mới (xem §4).
-4. **Chỉ có 4 trạng thái**: Đi làm = 1 công · **Nửa công = 0,5 công** ·
-   Nghỉ = 0 công · Chưa chấm = chưa có dữ liệu. Không có phép, đi muộn,
-   ca làm, hay loại công nào khác.
+4. **Chỉ có 5 trạng thái**: Đi làm = 1 công · **Nửa công = 0,5 công** ·
+   **Tuỳ chỉnh = công nhập tay (0,05–1)** · Nghỉ = 0 công · Chưa chấm = chưa
+   có dữ liệu. Không có phép, đi muộn, ca làm, hay loại công nào khác.
    > Đặc tả gốc cấm nửa công ("Không có trạng thái nửa công... Nếu sau này
    > cần thì mới bổ sung"). Người dùng đã yêu cầu bổ sung vào 07/09/2026 cho
-   > trường hợp "đến làm rồi về giữa chừng". Đây là ngoại lệ duy nhất được mở.
-   > Số công của mỗi trạng thái nằm ở `AttendanceStatus.workUnits` — đó là
-   > nguồn duy nhất, đừng tính lại `status == present ? 1 : 0` ở bất kỳ đâu.
+   > trường hợp "đến làm rồi về giữa chừng" - đây là ngoại lệ đầu tiên trong số
+   > các ngoại lệ đã mở (đa cơ sở ở §0.2, âm lịch ở §5.2.2).
+   > Số công của ba trạng thái cố định (Đi làm/Nửa công/Nghỉ) nằm ở
+   > `AttendanceStatus.workUnits` — đó là nguồn duy nhất, đừng tính lại
+   > `status == present ? 1 : 0` ở bất kỳ đâu.
+   > **Tuỳ chỉnh là ngoại lệ tiếp theo**, người dùng yêu cầu ngày 17/09/2026
+   > cho trường hợp làm không tròn nửa ngày (ví dụ 5-6 tiếng trên 8 tiếng
+   > chuẩn) - nhập theo **số giờ đã làm**, app tự quy đổi ra công theo
+   > `AppSettings.workHoursPerDay`. Trạng thái này **không** có số công cố
+   > định trong enum: `AttendanceStatus.custom.workUnits` luôn trả về `0` chỉ
+   > để làm giá trị mặc định an toàn, số công thật nằm ở
+   > `AttendanceRecord.workUnits` do người dùng nhập - đọc trực tiếp ở đó,
+   > đừng suy ra từ enum. `AttendanceRecord.forDay`/`copyWith` bắt buộc nhận
+   > tham số `workUnits` khi trạng thái là Tuỳ chỉnh, ba trạng thái còn lại
+   > vẫn tự lấy số công cố định của mình như cũ.
+   > **Hiện số công của Tuỳ chỉnh ra màn hình luôn viết theo giờ** (`Fmt.
+   > customWorkHours`, ví dụ "6h", "5h30"), không viết số công thập phân
+   > ("0,75c") - người dùng phản hồi ngày 17/09/2026 rằng số công thập phân dễ
+   > nhầm thành số ngày công. Việc quy đổi ra công (để tính lương) vẫn diễn
+   > ra ở tầng dữ liệu như trên, chỉ riêng lớp hiển thị mới đổi sang giờ.
 5. **OT lưu riêng với công.** OT không bao giờ làm thay đổi `workUnits`.
    OT không được âm, có thể bằng 0, và **độc lập với trạng thái** (đặc tả cho
    phép Nghỉ vẫn có OT — đừng "sửa" thành reset OT về 0).
@@ -175,7 +192,8 @@ lib/
     │                            · status_picker_sheet
     ├── overview/                overview_tab · employee_month_screen
     │                            · period_picker_sheet
-    └── settings/                settings_tab + 6 màn con (thêm review_screen)
+    └── settings/                settings_tab + 5 màn con + review_screen
+                                 (dialog "đánh giá app", không phải màn push)
 ```
 
 **Quy tắc**: mọi câu lệnh Firestore phải nằm trong `data_service.dart`.
@@ -356,7 +374,9 @@ totalPay = basePay + otPay
   ("111 **công**", "22.400.000 **đ**") để đọc là hiểu ngay đơn vị gì.
 - Màu: chỉ lấy từ `AppColors`, dải màu chuyển lấy từ `AppGradients`. Không
   hardcode `Color(0x...)` hay tự dựng `LinearGradient` trong màn hình.
-  `present` xanh lá, `absent` đỏ, `overtime` cam, `info` xanh dương.
+  `present` xanh lá, `absent` đỏ, `overtime` cam, `info` xanh dương,
+  `custom` tím (trạng thái Tuỳ chỉnh — tách riêng khỏi `info` đã dùng cho
+  Nửa công để hai trạng thái không lẫn màu nhau).
 - **Nền app là gradient** (`AppGradients.page`: `#E6FBF4` → `#F8FCFB` 35% →
   `#F5F9FB`), dựng **đúng một lần** ở `MaterialApp.builder` trong `main.dart`.
   Vì vậy `scaffoldBackgroundColor` và `appBarTheme.backgroundColor` đều để
@@ -476,17 +496,19 @@ xếp theo mức độ hay dùng, **đừng gộp hết vào một bảng chọn
 |---|---|---|
 | Cả danh sách đi làm | Nút "Tất cả đi làm" | Trường hợp phổ biến nhất |
 | Đổi 1 người sang Nghỉ | Chạm chip trạng thái (1 chạm) | Sửa lẻ sau khi chấm cả loạt |
-| Nửa công / bỏ chấm | Chạm nút ⌄ cuối dòng → bảng chọn | Ít gặp, chấp nhận 2 chạm |
+| Nửa công / Tuỳ chỉnh / bỏ chấm | Chạm nút ⌄ cuối dòng → bảng chọn | Ít gặp, chấp nhận 2 chạm (Tuỳ chỉnh thêm 1 hộp nhập giờ) |
 | Tăng ca | Chạm chip giờ bên phải | Độc lập với trạng thái |
 
-- Chip trạng thái chỉ xoay vòng **Đi làm ↔ Nghỉ**. Nửa công cố ý *không* nằm
-  trong vòng xoay này — nếu thêm vào, người dùng phải chạm 2–3 lần mới về được
-  trạng thái mong muốn, hỏng luôn mục tiêu tốc độ.
+- Chip trạng thái chỉ xoay vòng **Đi làm ↔ Nghỉ**. Nửa công và Tuỳ chỉnh cố ý
+  *không* nằm trong vòng xoay này — nếu thêm vào, người dùng phải chạm 2–3
+  lần mới về được trạng thái mong muốn, hỏng luôn mục tiêu tốc độ. Chạm chip
+  của một ngày đang Tuỳ chỉnh vẫn đưa thẳng về Nghỉ (giống Nửa công), không
+  quay vòng qua Đi làm trước.
 - "Tất cả đi làm" có **Hoàn tác** trong SnackBar 6 giây
   (`DataService.restoreDay`), vì một cú bấm nhầm sửa cùng lúc cả chục bản ghi.
 - Bỏ chấm = **xoá hẳn document** (`clearRecord`), không phải ghi trạng thái
   `NONE`. "Chưa chấm" nghĩa là không có bản ghi.
-- Nút "?" trên thanh tiêu đề mở bảng giải thích 4 trạng thái + các thao tác
+- Nút "?" trên thanh tiêu đề mở bảng giải thích 5 trạng thái + các thao tác
   (`showAttendanceHelp`). Người dùng không rành công nghệ nên cần chỗ tra.
 - **Điểm chạm mở bảng chọn phải luôn nhìn thấy được.** Bản đầu để cả vùng tên
   làm điểm chạm nhưng không vẽ gì, người dùng phản hồi "không thấy điểm chạm
@@ -609,12 +631,41 @@ chia sẻ của hệ điều hành (`share_plus`) để người dùng lưu / g�
 File ghi vào thư mục tạm (`path_provider`), không ghi thẳng vào Downloads —
 Android scoped storage.
 
-Bố cục file bám đúng bảng công giấy: mỗi nhân viên một dòng, mỗi ngày một cột,
-`X` = đi làm, `N` = nghỉ, ô trống = chưa chấm, số phía sau = giờ OT
-(ví dụ `X1,5`). Cuối bảng là các cột tổng hợp và dòng TỔNG CỘNG.
+**Bố cục dọc, mỗi nhân viên một khối** (đổi ngày 18/09/2026 theo yêu cầu người
+dùng — bản đầu là bảng ngang kiểu bảng công giấy, mỗi ngày một cột, nhưng một
+tháng 30 ngày thì bảng có tới ~40 cột, người dùng phản hồi *"để ngang mất lắm"*
+khi in, muốn *"vừa khổ A4"*). Chỉ 5 cột cố định
+(`ExportService._colDate/_colWeekday/_colStatus/_colUnits/_colOt`): Ngày · Thứ
+· Trạng thái · Công · OT (giờ) — tổng cộng ~73 đơn vị độ rộng, vừa một trang
+A4 dọc. Mỗi nhân viên là một khối xếp từ trên xuống:
 
-Tiền ghi bằng `DoubleCellValue` + `numberFormat: '#,##0'` để Excel hiểu là số,
-không phải chuỗi — đừng đổi sang `TextCellValue`.
+1. Banner tên (`"{STT}. {Tên}"`, nền xanh nhạt như tiêu đề cột).
+2. Lương/ngày, Đơn giá OT/giờ.
+3. Bảng ngày: mỗi ngày trong kỳ một dòng, cột Trạng thái viết chữ đầy đủ
+   ("Đi làm", "Nửa công", "Nghỉ", "Chưa chấm", hoặc "Tuỳ chỉnh (6h)" —
+   `ExportService._statusLabel`, dùng `Fmt.customWorkHours` chứ không viết
+   số công thập phân, cùng lý do đã nêu ở §0.4). Cột Công là số công thật
+   (`r.workUnits`), cột OT là số giờ OT nếu có.
+4. Dòng TỔNG (tổng công + tổng OT của kỳ), Số ngày nghỉ, Lương công, Tiền OT,
+   TỔNG LƯƠNG, rồi một dòng trống ngăn với khối kế tiếp.
+
+Cuối file là khối "TỔNG CỘNG TOÀN BỘ CƠ SỞ" cùng khuôn dạng, rồi phần ghi chú.
+
+**Đây là kiểu "một nhân viên xem chi tiết dễ, đọc dọc từ trên xuống"**, đánh
+đổi lấy file dài hơn hẳn (10-20 người × ~40 dòng/người), người dùng đã được
+hỏi và chọn kiểu này thay vì gộp tất cả nhân viên vào một bảng dài duy nhất
+(mỗi dòng một cặp nhân viên-ngày) — nếu sau này cần đổi hướng, hỏi lại người
+dùng trước, đừng tự quay lại bảng ngang.
+
+`excel` (gói Dart) **không hỗ trợ đặt khổ giấy / hướng in** (đã tra, phiên bản
+4.0.6 không có API nào cho `pageSetup`/orientation) — cách duy nhất để file
+"vừa khổ A4 dọc" là giữ bảng ít cột như trên, không thể ép hướng in bằng code.
+
+Tiền vẫn luôn ghi bằng `DoubleCellValue` + `numberFormat: '#,##0'`
+(`ExportService._cellMoney`/`_cellMoneyBold`, ghép nhãn ở cột Ngày và số tiền
+ở cột Thứ qua `_putLabelMoney`) để Excel hiểu là số, không phải chuỗi — đừng
+đổi sang `TextCellValue`, kể cả khi ghép chung một dòng "nhãn: giá trị" cho
+gọn trông có vẻ tiện hơn.
 
 ### 5.4. Khởi động app — đừng chờ gì trong `main()`
 
@@ -662,13 +713,59 @@ gọi từ `HomeShell.initState` trong `addPostFrameCallback`:
   đang đọc thì lần sau vẫn được chào.
 - Phải gọi sau khung hình đầu: trong `initState` chưa có `Overlay` để đẩy
   dialog lên.
-- Nút "Thêm nhân viên ngay" chuyển tab bằng `AppEvents.requestTab`, **không**
-  `HomeShell.of(context)` — dialog là một route nằm cùng cấp `HomeShell` trong
-  Overlay (§6).
+- **Phải đợi màn Home thành route trên cùng** (`_waitUntilHomeIsTop`) rồi mới
+  hiện. Bản đầu hiện ngay và người dùng phản hồi *"sao lại tắt đi nhỉ"*:
+  `LoginScreen`/`RegisterScreen` dọn stack bằng `popUntil((r) => r.isFirst)`,
+  mà `HomeShell` mount **trước** lệnh đó (`AuthGate` đổi nội dung route đầu
+  ngay khi `authState` đổi, còn `popUntil` chỉ chạy khi `signIn` await xong)
+  → dialog vừa đẩy lên bị chính `popUntil` kia pop mất. Chờ quá 10s thì
+  không hiện và **không ghi khoá**, để lần mở app sau chào lại.
+- Đóng bằng nút X góc trên phải hoặc nút "Bắt đầu" — cả hai gọi thẳng
+  `Navigator.pop()`. `barrierDismissible: false` chặn chạm ra ngoài,
+  `PopScope(canPop: false)` chặn cử chỉ back của hệ thống; `canPop` không ảnh
+  hưởng tới `Navigator.pop()` gọi tay nên hai nút trên vẫn đóng được bình
+  thường.
+- **Giao diện theo mẫu người dùng đưa 08/09/2026** (ảnh chụp màn tương tự):
+  nền `assets/images/img_bg_welcome.png` phủ sau toàn dialog, icon lịch+tick
+  ghép huy hiệu đồng hồ ở góc (`_CalendarClockIcon` — hai icon Material lồng
+  nhau bằng `Stack`, không phải ảnh vẽ riêng), tiêu đề + phụ đề, ba dòng tính
+  năng (`_FeatureRow`: icon tròn nền nhạt + tiêu đề cùng màu + mô tả — hai
+  dòng đầu xanh dương `info`/`infoSoft`, dòng cuối cam `overtime`/
+  `overtimeSoft`, đúng màu ảnh mẫu), dòng "Bạn chỉ cần 3 tab: ...", rồi
+  `GradientButton` full-width. Bản đầu tiên (chưa theo ảnh mẫu) có thêm nút
+  phụ "Thêm nhân viên ngay" chuyển sang tab Cài đặt — **đã bỏ** khi đổi giao
+  diện vì ảnh mẫu chỉ có một nút hành động; cần lại thì chuyển tab qua
+  `AppEvents.requestTab`, **không** `HomeShell.of(context)` (dialog là route
+  nằm cùng cấp `HomeShell` trong Overlay, xem §6).
+- Ảnh nền nằm ở `assets/images/` như mọi ảnh khác của app (đã khai báo trong
+  `pubspec.yaml` qua `assets/images/`) — đừng để lẻ ở `assets/` gốc, thêm ảnh
+  mới ở đó sẽ không được đóng gói.
 
-**Đánh giá app** (`screens/settings/review_screen.dart`) — sao 1..5 + góp ý,
-lưu qua `DataService.saveReview`:
+**Đánh giá app** (`screens/settings/review_screen.dart`, `showReviewDialog`) —
+**là một dialog nổi trên tab Cài đặt, không phải màn `push` riêng.** Bản đầu
+dựng thành `ReviewScreen` (cả `Scaffold`) rồi lại đổi vì người dùng muốn xem
+ảnh mẫu (dialog kiểu "rate us" phổ biến: linh vật `assets/images/img_rate.png`
++ tiêu đề + 5 sao + nút "Đánh giá ngay" + "Để sau") — **đừng quay lại kiểu
+`Scaffold` toàn màn**, giữ đúng khuôn dialog.
 
+- **`showReviewDialog(context)` gọi thẳng, không qua `pushScreen`.** Bên trong
+  `showDialog<bool>` trả về `true` khi bấm "Đánh giá ngay", `false`/`null` khi
+  "Để sau" hoặc nút X.
+- **Mở Play Store *sau khi* dialog đã đóng**, dùng `context` của màn Cài đặt
+  (tham số của `showReviewDialog`) — *không* dùng `context` bên trong
+  `_ReviewDialog` để `launchUrl`/`showToast`: dialog đã `pop` thì context đó
+  mất, gọi vào là ăn lỗi hoặc không hiện gì. Đây là lý do hàm tách làm hai
+  lớp: `_ReviewDialog` chỉ `pop(true/false)`, còn việc mở Store nằm ở
+  `showReviewDialog` — thấy y hệt bẫy "màn được `push`" ở §6 nhưng lần này là
+  dialog với context bên ngoài.
+- 5 sao **sáng lần lượt khi mở dialog** (`_animateStars`, mặc định 5 sao) và
+  chạy lại nếu chạm chọn số sao khác — hiệu ứng dùng
+  `ScaleTransition(scale: animation, ...)`, **không phải** tham số
+  `animation:` (đó là lỗi build đã gặp — `ScaleTransition` không có tham số
+  đó, tham số đúng là `scale`).
+- Bấm "Đánh giá ngay" ghi số sao **không chờ** (`.catchError` nuốt lỗi) rồi
+  `pop(true)` ngay — đây là hành động rời màn, lỗi ghi (mất mạng) không được
+  cản việc mở Store.
 - Ghi vào **`companies/{cid}/reviews`**, không phải collection riêng ở gốc:
   nhánh con của cơ sở đã được rules cho phép sẵn (chủ ghi, tài khoản tổng đọc)
   nên **không phải sửa và Publish lại `firestore.rules`**. Thêm collection ở
@@ -679,9 +776,10 @@ lưu qua `DataService.saveReview`:
   (`DataService.latestReview`, `orderBy createdAt` + `limit 1` → vẫn không cần
   composite index). Đọc lỗi thì bỏ qua thẻ đó, đừng để cả màn báo cáo chết.
 - **Play Store**: cờ `kOnPlayStore` trong `review_screen.dart` đang `false` vì
-  app giao bằng file APK. Lên store rồi đổi thành `true` là hiện dòng "Đánh
-  giá trên Play Store" (mở bằng `url_launcher`, dependency thêm cho việc này),
-  không phải sửa gì khác.
+  app giao bằng file APK — bấm "Đánh giá ngay" lúc này chỉ hiện toast cảm ơn,
+  chưa mở được Store thật. Lên store rồi đổi cờ thành `true` là nút mở thẳng
+  `_playStoreUrl` (`url_launcher`, dependency thêm riêng cho việc này), không
+  phải sửa gì khác.
 
 ---
 

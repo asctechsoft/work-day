@@ -362,20 +362,26 @@ class DataService {
     return employees.map((e) {
       final rs = byEmployee[e.id] ?? const <AttendanceRecord>[];
       var units = 0.0;
+      var present = 0;
       var absent = 0;
       var half = 0;
+      var custom = 0;
       var ot = 0;
       for (final r in rs) {
         units += r.workUnits;
+        if (r.status == AttendanceStatus.present) present++;
         if (r.status == AttendanceStatus.absent) absent++;
         if (r.status == AttendanceStatus.half) half++;
+        if (r.status == AttendanceStatus.custom) custom++;
         ot += r.overtimeMinutes;
       }
       return MonthlySummary(
         employeeId: e.id,
         totalWorkUnits: units,
+        presentDays: present,
         absentDays: absent,
         halfDays: half,
+        customDays: custom,
         overtimeMinutes: ot,
         dailySalary: e.dailySalary,
         otRate: e.otRate,

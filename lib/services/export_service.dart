@@ -17,12 +17,23 @@ class ExportService {
 
   static const _weekdayShort = ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'];
 
+  /// Cột của bảng ngày: Ngày | Thứ | Trạng thái | Công | OT (giờ).
+  /// Chỉ 5 cột hẹp - vừa khổ A4 dọc, không phải bảng ngang mỗi ngày một cột
+  /// như bản trước (người dùng phản hồi 18/09/2026: bảng ngang "dài", "mất"
+  /// khi in). Đổi lại: mỗi nhân viên một khối riêng, xếp dọc từ trên xuống.
+  static const _colDate = 0;
+  static const _colWeekday = 1;
+  static const _colStatus = 2;
+  static const _colUnits = 3;
+  static const _colOt = 4;
+
   /// Dựng file và trả về đường dẫn đã lưu.
   Future<String> exportPeriod({
     required PayPeriod period,
     required List<Employee> employees,
     required List<AttendanceRecord> records,
     required String orgName,
+    required int workHoursPerDay,
   }) async {
     final excel = Excel.createExcel();
     const sheetName = 'Bảng công';
@@ -30,207 +41,204 @@ class ExportService {
     final sheet = excel[sheetName];
 
     final days = period.days;
-    // Cột: STT | Nhân viên | các ngày... | 8 cột tổng hợp
-    const colIndex = 0;
-    const colName = 1;
-    final firstDayCol = 2;
-    final colWork = firstDayCol + days.length;
-    final colHalf = colWork + 1;
-    final colAbsent = colHalf + 1;
-    final colOt = colAbsent + 1;
-    final colDaily = colOt + 1;
-    final colOtRate = colDaily + 1;
-    final colBasePay = colOtRate + 1;
-    final colOtPay = colBasePay + 1;
-    final colTotal = colOtPay + 1;
+    final byEmployeeDay = <String, AttendanceRecord>{
+      for (final r in records) '${r.employeeId}_${r.workDate}': r,
+    };
+
+    var row = 0;
 
     // ---------------------------------------------------------- Phần đầu
-    _put(sheet, colIndex, 0, TextCellValue(orgName), _titleStyle);
+    _put(sheet, _colDate, row++, TextCellValue(orgName), _titleStyle);
     _put(
       sheet,
-      colIndex,
-      1,
+      _colDate,
+      row++,
       TextCellValue('BẢNG CHẤM CÔNG & TÍNH LƯƠNG'),
       _titleStyle,
     );
     _put(
       sheet,
-      colIndex,
-      2,
+      _colDate,
+      row++,
       TextCellValue('Kỳ lương: ${period.fullRangeLabel}'),
       _subtitleStyle,
     );
     final now = DateTime.now();
     _put(
       sheet,
-      colIndex,
-      3,
+      _colDate,
+      row++,
       TextCellValue(
         'Xuất lúc: ${Fmt.date(now)} ${Fmt.pad2(now.hour)}:${Fmt.pad2(now.minute)}',
       ),
       _subtitleStyle,
     );
+    row++;
 
-    // ---------------------------------------------------------- Tiêu đề bảng
-    const rowWeekday = 5;
-    const rowHeader = 6;
-    const firstDataRow = 7;
+    var grandUnits = 0.0;
+    var grandAbsent = 0;
+    var grandOtMinutes = 0;
+    var grandBasePay = 0.0;
+    var grandOtPay = 0.0;
 
-    _put(sheet, colIndex, rowHeader, TextCellValue('STT'), _headStyle);
-    _put(sheet, colName, rowHeader, TextCellValue('Nhân viên'), _headStyle);
-
-    for (var i = 0; i < days.length; i++) {
-      final d = days[i];
-      final weekend = d.weekday == DateTime.sunday;
-      _put(
-        sheet,
-        firstDayCol + i,
-        rowWeekday,
-        TextCellValue(_weekdayShort[d.weekday - 1]),
-        weekend ? _weekendStyle : _weekdayStyle,
-      );
-      _put(
-        sheet,
-        firstDayCol + i,
-        rowHeader,
-        IntCellValue(d.day),
-        weekend ? _weekendHeadStyle : _headStyle,
-      );
-    }
-
-    const summaryHeads = [
-      'Tổng công',
-      'Nửa ngày',
-      'Nghỉ',
-      'Tổng OT (giờ)',
-      'Lương/ngày',
-      'Đơn giá OT',
-      'Lương công',
-      'Tiền OT',
-      'TỔNG LƯƠNG',
-    ];
-    for (var i = 0; i < summaryHeads.length; i++) {
-      _put(
-        sheet,
-        colWork + i,
-        rowHeader,
-        TextCellValue(summaryHeads[i]),
-        _headStyle,
-      );
-    }
-
-    // ---------------------------------------------------------- Dữ liệu
-    final byEmployeeDay = <String, AttendanceRecord>{
-      for (final r in records) '${r.employeeId}_${r.workDate}': r,
-    };
-
-    var totalUnits = 0.0;
-    var totalHalf = 0;
-    var totalAbsent = 0;
-    var totalOtMinutes = 0;
-    var totalBase = 0.0;
-    var totalOtPay = 0.0;
-    var grandTotal = 0.0;
-
+    // -------------------------------------------------- Từng khối nhân viên
     for (var i = 0; i < employees.length; i++) {
       final e = employees[i];
-      final row = firstDataRow + i;
 
-      _put(sheet, colIndex, row, IntCellValue(i + 1), _cellCenter);
-      _put(sheet, colName, row, TextCellValue(e.name), _cellLeft);
+      _put(
+        sheet,
+        _colDate,
+        row++,
+        TextCellValue('${i + 1}. ${e.name}'),
+        _sectionStyle,
+      );
+      _putLabelMoney(sheet, row++, 'Lương/ngày', e.dailySalary);
+      _putLabelMoney(sheet, row++, 'Đơn giá OT/giờ', e.otRate);
+
+      _put(sheet, _colDate, row, TextCellValue('Ngày'), _headStyle);
+      _put(sheet, _colWeekday, row, TextCellValue('Thứ'), _headStyle);
+      _put(sheet, _colStatus, row, TextCellValue('Trạng thái'), _headStyle);
+      _put(sheet, _colUnits, row, TextCellValue('Công'), _headStyle);
+      _put(sheet, _colOt, row, TextCellValue('OT (giờ)'), _headStyle);
+      row++;
 
       var units = 0.0;
-      var half = 0;
       var absent = 0;
       var otMinutes = 0;
 
-      for (var d = 0; d < days.length; d++) {
-        final r = byEmployeeDay['${e.id}_${Fmt.dateKey(days[d])}'];
+      for (final d in days) {
+        final r = byEmployeeDay['${e.id}_${Fmt.dateKey(d)}'];
+        final weekend = d.weekday == DateTime.sunday;
+
+        _put(
+          sheet,
+          _colDate,
+          row,
+          TextCellValue(Fmt.dayMonth(d)),
+          weekend ? _weekendStyle : _cellCenter,
+        );
+        _put(
+          sheet,
+          _colWeekday,
+          row,
+          TextCellValue(_weekdayShort[d.weekday - 1]),
+          weekend ? _weekendStyle : _cellCenter,
+        );
+
         if (r == null) {
-          _put(sheet, firstDayCol + d, row, null, _cellCenter);
+          _put(sheet, _colStatus, row, TextCellValue('Chưa chấm'), _cellLeft);
+          _put(sheet, _colUnits, row, null, _cellCenter);
+          _put(sheet, _colOt, row, null, _cellCenter);
+          row++;
           continue;
         }
+
         units += r.workUnits;
-        if (r.status == AttendanceStatus.half) half++;
         if (r.status == AttendanceStatus.absent) absent++;
         otMinutes += r.overtimeMinutes;
 
         _put(
           sheet,
-          firstDayCol + d,
+          _colStatus,
           row,
-          TextCellValue(_dayMark(r)),
+          TextCellValue(_statusLabel(r, workHoursPerDay)),
           _dayStyle(r.status),
         );
+        _put(
+          sheet,
+          _colUnits,
+          row,
+          DoubleCellValue(r.workUnits),
+          _dayStyle(r.status),
+        );
+        _put(
+          sheet,
+          _colOt,
+          row,
+          r.overtimeMinutes > 0
+              ? DoubleCellValue(r.overtimeMinutes / 60.0)
+              : null,
+          _cellCenter,
+        );
+        row++;
       }
 
       final basePay = units * e.dailySalary;
       final otPay = (otMinutes / 60.0) * e.otRate;
 
-      _put(sheet, colWork, row, DoubleCellValue(units), _cellCenter);
-      _put(sheet, colHalf, row, IntCellValue(half), _cellCenter);
-      _put(sheet, colAbsent, row, IntCellValue(absent), _cellCenter);
+      _put(sheet, _colStatus, row, TextCellValue('TỔNG'), _totalCountStyle);
       _put(
         sheet,
-        colOt,
+        _colUnits,
+        row,
+        DoubleCellValue(units),
+        _totalCountStyle,
+      );
+      _put(
+        sheet,
+        _colOt,
         row,
         DoubleCellValue(otMinutes / 60.0),
-        _cellCenter,
+        _totalCountStyle,
       );
-      _put(sheet, colDaily, row, DoubleCellValue(e.dailySalary), _cellMoney);
-      _put(sheet, colOtRate, row, DoubleCellValue(e.otRate), _cellMoney);
-      _put(sheet, colBasePay, row, DoubleCellValue(basePay), _cellMoney);
-      _put(sheet, colOtPay, row, DoubleCellValue(otPay), _cellMoney);
-      _put(
-        sheet,
-        colTotal,
-        row,
-        DoubleCellValue(basePay + otPay),
-        _cellMoneyBold,
-      );
+      row++;
 
-      totalUnits += units;
-      totalHalf += half;
-      totalAbsent += absent;
-      totalOtMinutes += otMinutes;
-      totalBase += basePay;
-      totalOtPay += otPay;
-      grandTotal += basePay + otPay;
+      _putLabelNumber(sheet, row++, 'Số ngày nghỉ', absent.toDouble());
+      _putLabelMoney(sheet, row++, 'Lương công', basePay);
+      _putLabelMoney(sheet, row++, 'Tiền OT', otPay);
+      _putLabelMoney(
+        sheet,
+        row++,
+        'TỔNG LƯƠNG',
+        basePay + otPay,
+        bold: true,
+      );
+      row++; // dòng trống ngăn cách hai khối nhân viên
+
+      grandUnits += units;
+      if (absent > 0) grandAbsent += absent;
+      grandOtMinutes += otMinutes;
+      grandBasePay += basePay;
+      grandOtPay += otPay;
     }
 
-    // ---------------------------------------------------------- Dòng tổng
-    final totalRow = firstDataRow + employees.length;
-    _put(sheet, colName, totalRow, TextCellValue('TỔNG CỘNG'), _totalStyle);
-    _put(sheet, colWork, totalRow, DoubleCellValue(totalUnits), _totalStyle);
-    _put(sheet, colHalf, totalRow, IntCellValue(totalHalf), _totalStyle);
-    _put(sheet, colAbsent, totalRow, IntCellValue(totalAbsent), _totalStyle);
+    // ---------------------------------------------------------- Tổng cơ sở
     _put(
       sheet,
-      colOt,
-      totalRow,
-      DoubleCellValue(totalOtMinutes / 60.0),
-      _totalStyle,
+      _colDate,
+      row++,
+      TextCellValue('TỔNG CỘNG TOÀN BỘ CƠ SỞ'),
+      _sectionStyle,
     );
-    _put(sheet, colBasePay, totalRow, DoubleCellValue(totalBase), _totalStyle);
-    _put(sheet, colOtPay, totalRow, DoubleCellValue(totalOtPay), _totalStyle);
-    _put(sheet, colTotal, totalRow, DoubleCellValue(grandTotal), _totalStyle);
+    _putLabelNumber(sheet, row++, 'Tổng công', grandUnits);
+    _putLabelNumber(sheet, row++, 'Tổng nghỉ (ngày)', grandAbsent.toDouble());
+    _putLabelNumber(sheet, row++, 'Tổng OT (giờ)', grandOtMinutes / 60.0);
+    _putLabelMoney(sheet, row++, 'Lương công', grandBasePay);
+    _putLabelMoney(sheet, row++, 'Tiền OT', grandOtPay);
+    _putLabelMoney(
+      sheet,
+      row++,
+      'TỔNG QUỸ LƯƠNG',
+      grandBasePay + grandOtPay,
+      bold: true,
+    );
+    row++;
 
     // ---------------------------------------------------------- Chú thích
     _put(
       sheet,
-      colIndex,
-      totalRow + 2,
+      _colDate,
+      row++,
       TextCellValue(
-        'Ghi chú:  X = đi làm (1 công)   ·   1/2 = nửa công (0,5 công)   ·   '
-        'N = nghỉ (0 công)   ·   ô trống = chưa chấm   ·   '
-        '"+số" phía sau = số giờ tăng ca (ví dụ X+1,5)',
+        'Ghi chú: cột Công là số công thực (1 = đi làm, 0,5 = nửa công, số '
+        'khác = Tuỳ chỉnh). Tuỳ chỉnh viết kèm số giờ đã làm ở cột Trạng thái.',
       ),
       _subtitleStyle,
     );
     _put(
       sheet,
-      colIndex,
-      totalRow + 3,
+      _colDate,
+      row++,
       TextCellValue(
         'Tổng lương = Tổng công × Lương/ngày + Tổng giờ OT × Đơn giá OT',
       ),
@@ -238,23 +246,14 @@ class ExportService {
     );
 
     // ---------------------------------------------------------- Độ rộng cột
-    sheet.setColumnWidth(colIndex, 5);
-    sheet.setColumnWidth(colName, 22);
-    for (var i = 0; i < days.length; i++) {
-      sheet.setColumnWidth(firstDayCol + i, 4.6);
-    }
-    sheet.setColumnWidth(colWork, 10);
-    sheet.setColumnWidth(colHalf, 9);
-    sheet.setColumnWidth(colAbsent, 7);
-    sheet.setColumnWidth(colOt, 13);
-    sheet.setColumnWidth(colDaily, 13);
-    sheet.setColumnWidth(colOtRate, 12);
-    sheet.setColumnWidth(colBasePay, 14);
-    sheet.setColumnWidth(colOtPay, 12);
-    sheet.setColumnWidth(colTotal, 15);
-
-    // Giữ cố định phần tên nhân viên khi cuộn ngang qua các cột ngày.
-    sheet.setColumnAutoFit(colName);
+    // Cột Ngày/Thứ còn dùng chung làm cột "nhãn/số tiền" ở các dòng tổng hợp
+    // (Lương/ngày, TỔNG LƯƠNG...) nên phải đủ rộng cho cả hai vai trò đó,
+    // không chỉ vừa "01/09" hay "CN".
+    sheet.setColumnWidth(_colDate, 18);
+    sheet.setColumnWidth(_colWeekday, 14);
+    sheet.setColumnWidth(_colStatus, 22);
+    sheet.setColumnWidth(_colUnits, 9);
+    sheet.setColumnWidth(_colOt, 10);
 
     final bytes = excel.save();
     if (bytes == null) {
@@ -275,12 +274,14 @@ class ExportService {
     required List<Employee> employees,
     required List<AttendanceRecord> records,
     required String orgName,
+    required int workHoursPerDay,
   }) async {
     final path = await exportPeriod(
       period: period,
       employees: employees,
       records: records,
       orgName: orgName,
+      workHoursPerDay: workHoursPerDay,
     );
 
     await SharePlus.instance.share(
@@ -295,19 +296,19 @@ class ExportService {
   static const _xlsxMime =
       'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 
-  /// Ký hiệu trong ô của một ngày.
-  /// X = đi làm, 1/2 = nửa công, N = nghỉ; "+số" là số giờ tăng ca.
-  static String _dayMark(AttendanceRecord r) {
-    final base = r.status.exportMark;
-    if (r.overtimeMinutes <= 0) return base;
-    final hours = Fmt.otHoursDecimal(r.overtimeMinutes);
-    return '$base+$hours';
+  /// Chữ hiện ở cột Trạng thái. Tuỳ chỉnh viết kèm số giờ đã làm
+  /// (ví dụ "Tuỳ chỉnh (6h)") vì mỗi ngày một số khác nhau.
+  static String _statusLabel(AttendanceRecord r, int workHoursPerDay) {
+    if (r.status != AttendanceStatus.custom) return r.status.label;
+    final hours = Fmt.customWorkHours(r.workUnits, workHoursPerDay);
+    return '${r.status.label} ($hours)';
   }
 
   static CellStyle _dayStyle(AttendanceStatus status) => switch (status) {
         AttendanceStatus.present => _cellPresent,
         AttendanceStatus.half => _cellHalf,
         AttendanceStatus.absent => _cellAbsent,
+        AttendanceStatus.custom => _cellCustom,
         AttendanceStatus.none => _cellCenter,
       };
 
@@ -325,6 +326,44 @@ class ExportService {
     cell.cellStyle = style;
   }
 
+  /// Một dòng "nhãn: số tiền" - nhãn ở cột Ngày, số tiền ở cột Thứ. Số tiền
+  /// luôn là ô số thật (`DoubleCellValue`), không phải chuỗi, để còn
+  /// cộng/lọc/sửa công thức trong Excel được (đừng đổi sang `TextCellValue`).
+  static void _putLabelMoney(
+    Sheet sheet,
+    int row,
+    String label,
+    double amount, {
+    bool bold = false,
+  }) {
+    _put(
+      sheet,
+      _colDate,
+      row,
+      TextCellValue(label),
+      bold ? _cellLeftBold : _cellLeft,
+    );
+    _put(
+      sheet,
+      _colWeekday,
+      row,
+      DoubleCellValue(amount),
+      bold ? _cellMoneyBold : _cellMoney,
+    );
+  }
+
+  /// Giống [_putLabelMoney] nhưng cho số thường (công, giờ) - không định
+  /// dạng tiền.
+  static void _putLabelNumber(
+    Sheet sheet,
+    int row,
+    String label,
+    double value,
+  ) {
+    _put(sheet, _colDate, row, TextCellValue(label), _cellLeft);
+    _put(sheet, _colWeekday, row, DoubleCellValue(value), _cellCenter);
+  }
+
   // ------------------------------------------------------------- Kiểu ô
 
   static final _titleStyle = CellStyle(bold: true, fontSize: 13);
@@ -340,17 +379,11 @@ class ExportService {
     textWrapping: TextWrapping.WrapText,
   );
 
-  static final _weekendHeadStyle = CellStyle(
+  /// Banner đầu mỗi khối - tên nhân viên và dòng "TỔNG CỘNG TOÀN BỘ CƠ SỞ".
+  static final _sectionStyle = CellStyle(
     bold: true,
-    fontSize: 10,
-    backgroundColorHex: ExcelColor.fromHexString('#FBDDDD'),
-    horizontalAlign: HorizontalAlign.Center,
-  );
-
-  static final _weekdayStyle = CellStyle(
-    fontSize: 9,
-    horizontalAlign: HorizontalAlign.Center,
-    fontColorHex: ExcelColor.fromHexString('#8A97A8'),
+    fontSize: 12,
+    backgroundColorHex: ExcelColor.fromHexString('#D6EFE6'),
   );
 
   static final _weekendStyle = CellStyle(
@@ -366,6 +399,8 @@ class ExportService {
   );
 
   static final _cellLeft = CellStyle(fontSize: 10);
+
+  static final _cellLeftBold = CellStyle(fontSize: 10, bold: true);
 
   static final _cellPresent = CellStyle(
     fontSize: 10,
@@ -388,6 +423,13 @@ class ExportService {
     fontColorHex: ExcelColor.fromHexString('#E0484D'),
   );
 
+  static final _cellCustom = CellStyle(
+    fontSize: 10,
+    bold: true,
+    horizontalAlign: HorizontalAlign.Center,
+    fontColorHex: ExcelColor.fromHexString('#7C5CFC'),
+  );
+
   static final _cellMoney = CellStyle(
     fontSize: 10,
     horizontalAlign: HorizontalAlign.Right,
@@ -401,11 +443,13 @@ class ExportService {
     numberFormat: const CustomNumericNumFormat(formatCode: '#,##0'),
   );
 
-  static final _totalStyle = CellStyle(
+  /// Dòng "TỔNG" của bảng ngày trong mỗi khối nhân viên - số công/giờ OT,
+  /// không phải tiền nên không dùng định dạng `#,##0` (mất chữ số thập phân
+  /// của công tuỳ chỉnh, ví dụ 0,625).
+  static final _totalCountStyle = CellStyle(
     bold: true,
     fontSize: 11,
     backgroundColorHex: ExcelColor.fromHexString('#EDF3F8'),
-    horizontalAlign: HorizontalAlign.Right,
-    numberFormat: const CustomNumericNumFormat(formatCode: '#,##0'),
+    horizontalAlign: HorizontalAlign.Center,
   );
 }

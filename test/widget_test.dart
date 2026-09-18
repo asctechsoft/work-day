@@ -34,6 +34,16 @@ void main() {
       expect(Fmt.otHoursDecimal(120), '2');
     });
 
+    test(
+        'giờ làm của công Tuỳ chỉnh hiện theo giờ (không phải số công), để '
+        'không nhầm với ngày công', () {
+      // 0,75 công trên chuẩn 8 giờ/ngày = 6 giờ.
+      expect(Fmt.customWorkHours(0.75, 8), '6h');
+      // 0,6875 công (5,5/8 giờ) - làm tròn về mốc 5 phút vẫn ra 5h30.
+      expect(Fmt.customWorkHours(0.6875, 8), '5h30');
+      expect(Fmt.customWorkHours(1, 8), '8h');
+    });
+
     test('khoá ngày và khoá tháng', () {
       final d = DateTime(2026, 9, 6);
       expect(Fmt.dateKey(d), '2026-09-06');
@@ -113,6 +123,39 @@ void main() {
 
       expect(r.workUnits, 0);
       expect(r.overtimeMinutes, 90);
+    });
+
+    test(
+        'Tuỳ chỉnh lấy đúng số công người dùng nhập, không theo số cố định '
+        'của enum', () {
+      // Làm 6 giờ trên tổng 8 giờ/ngày = 0,75 công - không phải 0 như
+      // AttendanceStatus.custom.workUnits (giá trị đó chỉ là mặc định an
+      // toàn, không được dùng để tính lương cho Tuỳ chỉnh).
+      final r = AttendanceRecord.forDay(
+        employeeId: 'e1',
+        day: DateTime(2026, 9, 6),
+        status: AttendanceStatus.custom,
+        workUnits: 0.75,
+      );
+      expect(r.workUnits, 0.75);
+
+      // Không truyền workUnits cho Tuỳ chỉnh thì mặc định 0, không crash.
+      final noUnits = AttendanceRecord.forDay(
+        employeeId: 'e1',
+        day: DateTime(2026, 9, 6),
+        status: AttendanceStatus.custom,
+      );
+      expect(noUnits.workUnits, 0);
+
+      // copyWith giữ nguyên số công Tuỳ chỉnh khi không truyền workUnits mới
+      // (ví dụ chỉ sửa OT) - không thì sửa OT sẽ vô tình xoá công đã nhập.
+      final keptUnits = r.copyWith(overtimeMinutes: 60);
+      expect(keptUnits.workUnits, 0.75);
+      expect(keptUnits.overtimeMinutes, 60);
+
+      // Ba trạng thái cố định bỏ qua workUnits được truyền vào.
+      final present = r.copyWith(status: AttendanceStatus.present, workUnits: 0.75);
+      expect(present.workUnits, 1);
     });
 
     test('một nhân viên chỉ có một bản ghi cho một ngày', () {
@@ -216,6 +259,33 @@ void main() {
       expect(s.halfDays, 1);
       expect(s.absentDays, 1);
       expect(s.markedDays, 4);
+    });
+
+    test(
+        'công Tuỳ chỉnh (làm 5-6 tiếng) cộng đúng vào tổng công và lương của '
+        'ngày đó', () {
+      const mai = Employee(id: 'mai', name: 'Cô Mai', dailySalary: 200000);
+      final records = [
+        rec('mai', '2026-09-01', AttendanceStatus.present, 0),
+        AttendanceRecord(
+          employeeId: 'mai',
+          workDate: '2026-09-02',
+          month: '2026-09',
+          status: AttendanceStatus.custom,
+          // Làm 6/8 giờ = 0,75 công - không phải 0,5 (Nửa công) hay 1 (Đi
+          // làm), đúng luật "làm 5-6 tiếng thì lương chỉnh theo giờ công đó".
+          workUnits: 0.75,
+          overtimeMinutes: 0,
+        ),
+      ];
+
+      final s = DataService.summarize([mai], records).single;
+
+      expect(s.totalWorkUnits, 1.75);
+      expect(s.customDays, 1);
+      expect(s.presentDays, 1);
+      expect(s.markedDays, 2);
+      expect(s.basePay, 1.75 * 200000);
     });
 
     test('nhân viên chưa có bản ghi nào thì lương bằng 0', () {

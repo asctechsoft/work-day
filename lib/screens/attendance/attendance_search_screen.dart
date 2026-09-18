@@ -185,6 +185,7 @@ class _AttendanceSearchScreenState extends State<AttendanceSearchScreen> {
                   employee: e,
                   record: records[e.id],
                   locked: _actions.isFuture,
+                  workHoursPerDay: widget.settings.workHoursPerDay,
                   onToggleStatus: () =>
                       _actions.toggleStatus(context, e, records[e.id]),
                   onEditOvertime: () =>

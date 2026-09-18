@@ -222,6 +222,7 @@ class _AttendanceTabState extends State<AttendanceTab> {
   ) {
     var present = 0;
     var half = 0;
+    var custom = 0;
     var absent = 0;
     var withOt = 0;
     var marked = 0;
@@ -231,6 +232,7 @@ class _AttendanceTabState extends State<AttendanceTab> {
       marked++;
       if (r.status == AttendanceStatus.present) present++;
       if (r.status == AttendanceStatus.half) half++;
+      if (r.status == AttendanceStatus.custom) custom++;
       if (r.status == AttendanceStatus.absent) absent++;
       if (r.overtimeMinutes > 0) withOt++;
     }
@@ -298,7 +300,7 @@ class _AttendanceTabState extends State<AttendanceTab> {
                   ),
                 ],
               ),
-              if (half > 0)
+              if (half > 0 || custom > 0)
                 Padding(
                   padding: const EdgeInsets.only(top: 8),
                   child: Row(
@@ -307,14 +309,17 @@ class _AttendanceTabState extends State<AttendanceTab> {
                       const Icon(
                         Icons.timelapse_rounded,
                         size: 14,
-                        color: AppColors.info,
+                        color: AppColors.textMuted,
                       ),
                       const SizedBox(width: 6),
                       Text(
-                        'Trong đó $half người nửa công',
+                        'Trong đó ${[
+                          if (half > 0) '$half nửa công',
+                          if (custom > 0) '$custom tuỳ chỉnh',
+                        ].join(', ')}',
                         style: const TextStyle(
                           fontSize: 12.5,
-                          color: AppColors.info,
+                          color: AppColors.textMuted,
                           fontWeight: FontWeight.w600,
                         ),
                       ),
@@ -382,6 +387,7 @@ class _AttendanceTabState extends State<AttendanceTab> {
                       employee: e,
                       record: records[e.id],
                       locked: _isFuture,
+                      workHoursPerDay: _settings.workHoursPerDay,
                       onToggleStatus: () =>
                           actions.toggleStatus(context, e, records[e.id]),
                       onEditOvertime: () =>

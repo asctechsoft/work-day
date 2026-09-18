@@ -1,4 +1,4 @@
-| **Cài đặt** | Cấu hình dữ liệu | Tài khoản · Danh sách nhân viên · Lương & tăng ca · Thiết lập chung · Đánh giá ứng dụng · Giới thiệu |# WorkDay — Chấm công & Tính lương
+# WorkDay — Chấm công & Tính lương
 
 App Flutter chấm công hằng ngày và tự tính lương cuối tháng cho cả cơ sở.
 Bản đơn giản: **3 tab • mỗi cơ sở một tài khoản • không phân quyền trong cơ sở**.
@@ -118,6 +118,7 @@ tự đồng bộ.
 |---|---|---|
 | **Đi làm** | 1 | Làm đủ ngày |
 | **Nửa công** | 0,5 | Có đến làm nhưng về giữa chừng |
+| **Tuỳ chỉnh** | nhập tay theo giờ | Làm không tròn nửa ngày (ví dụ 5-6 tiếng) - nhập số giờ đã làm, app tự quy đổi ra công theo "Số giờ công/ngày" ở Cài đặt để tính lương; màn hình luôn hiện lại theo **giờ** ("6h"), không hiện số công, để khỏi nhầm với ngày công |
 | **Nghỉ** | 0 | Không đi làm |
 | **Chưa chấm** | – | Chưa có dữ liệu, không tính công cũng không tính nghỉ |
 
@@ -130,7 +131,7 @@ làm thay đổi số công của ngày đó.
 |---|---|
 | Chấm cả danh sách đi làm | Nút **Tất cả đi làm** |
 | Đổi một người sang Nghỉ | Chạm vào **ô trạng thái** |
-| Nửa công, hoặc bỏ chấm khi bấm nhầm | Chạm nút **⌄** ở cuối dòng nhân viên |
+| Nửa công, Tuỳ chỉnh (nhập giờ), hoặc bỏ chấm khi bấm nhầm | Chạm nút **⌄** ở cuối dòng nhân viên |
 | Nhập tăng ca | Chạm vào **ô giờ** bên phải, nhập theo **phút** (90 = 1h30) |
 | Chấm bù ngày cũ | Chạm vào **ngày** trên thanh tiêu đề để mở lịch |
 | Xem lại luật chấm công | Nút **?** góc trên phải |
@@ -188,19 +189,20 @@ Tab **Tổng quan** → nút tải ở góc trên phải, hoặc thẻ **Chốt 
 xem **Bảng lương** → **Tải bảng công (.xlsx)**. App dựng file rồi mở khay chia sẻ để lưu về máy,
 gửi Zalo hoặc đẩy lên Drive.
 
-File có dạng đúng như bảng công giấy: mỗi nhân viên một dòng, mỗi ngày một cột.
+File trình bày **theo chiều dọc, mỗi nhân viên một khối** (không phải bảng
+ngang mỗi ngày một cột) — vừa khổ A4 khi in dọc, chỉ 5 cột cố định: Ngày ·
+Thứ · Trạng thái · Công · OT (giờ). Mỗi khối nhân viên gồm:
 
-| Ký hiệu | Nghĩa |
-|---|---|
-| `X` | Đi làm (1 công) |
-| `1/2` | Nửa công (0,5 công) |
-| `N` | Nghỉ (0 công) |
-| ô trống | Chưa chấm |
-| `X+1,5` | Đi làm + 1,5 giờ tăng ca |
+- Tên nhân viên, Lương/ngày, Đơn giá OT/giờ.
+- Một dòng cho mỗi ngày trong kỳ, cột Trạng thái viết chữ đầy đủ ("Đi làm",
+  "Nửa công", "Nghỉ", "Chưa chấm", hoặc "Tuỳ chỉnh (6h)" — viết theo **giờ**,
+  không phải số công thập phân, để khỏi nhầm với ngày công).
+- Dòng TỔNG (tổng công, tổng OT), Số ngày nghỉ, Lương công, Tiền OT, và
+  **TỔNG LƯƠNG**.
 
-Kèm các cột tổng hợp: Tổng công · Nửa ngày · Nghỉ · Tổng OT · Lương/ngày ·
-Đơn giá OT · Lương công · Tiền OT · **TỔNG LƯƠNG**, và một dòng TỔNG CỘNG ở cuối.
-Số tiền là **số thật** trong Excel nên cộng/lọc/sửa công thức được luôn.
+Cuối file là khối **TỔNG CỘNG TOÀN BỘ CƠ SỞ** cộng dồn tất cả nhân viên.
+Số tiền là **số thật** trong Excel (không phải chữ) nên cộng/lọc/sửa công
+thức được luôn.
 
 ---
 
@@ -212,9 +214,9 @@ Số tiền là **số thật** trong Excel nên cộng/lọc/sửa công thức
 | **Tổng quan** | Xem kết quả kỳ | Thống kê kỳ · Bảng lương từng người · Biểu đồ · Chi tiết nhân viên · Tải bảng công |
 | **Cài đặt** | Cấu hình dữ liệu | Tài khoản · Danh sách nhân viên · Lương & tăng ca · Thiết lập chung · Đánh giá ứng dụng · Giới thiệu |
 
-Lần đầu vào app hiện **dialog chào mừng** giới thiệu ba bước (thêm nhân viên →
-chấm công → xem lương), có nút đi thẳng sang tab Cài đặt để thêm nhân viên.
-Chỉ hiện một lần cho mỗi tài khoản trên mỗi máy.
+Lần đầu vào app hiện **dialog chào mừng** giới thiệu 3 tính năng chính (chấm
+công hằng ngày, tổng hợp công cuối tháng, tính lương tự động). Chỉ hiện một
+lần cho mỗi tài khoản trên mỗi máy.
 
 Luồng hằng ngày: mở app → tab Chấm công (mặc định hôm nay) → bấm
 **"Tất cả đi làm"** → sửa lại người nghỉ → thêm OT cho ai tăng ca → xong.

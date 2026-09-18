@@ -29,6 +29,11 @@ class AppColors {
   static const info = Color(0xFF2F80ED);
   static const infoSoft = Color(0xFFE8F1FE);
 
+  // Trạng thái "Tuỳ chỉnh" (công nhập tay theo giờ làm thực tế) - tách màu
+  // riêng khỏi info (đã dùng cho Nửa công) để hai trạng thái không lẫn nhau.
+  static const custom = Color(0xFF7C5CFC);
+  static const customSoft = Color(0xFFEFEAFE);
+
   // Ba mức xanh của nút chính (xanh ngọc -> mint), dùng trong
   // [AppGradients.primaryButton].
   static const buttonGradientStart = Color(0xFF36CFA4);

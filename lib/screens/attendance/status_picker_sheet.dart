@@ -10,22 +10,28 @@ class AttendanceChoice {
   final AttendanceStatus status;
   final int overtimeMinutes;
 
+  /// Số công - chỉ có ý nghĩa khi [status] là Tuỳ chỉnh.
+  final double? workUnits;
+
   /// true = xoá hẳn bản ghi, đưa về "Chưa chấm".
   final bool clear;
 
   const AttendanceChoice({
     required this.status,
     required this.overtimeMinutes,
+    this.workUnits,
     this.clear = false,
   });
 
   const AttendanceChoice.clear()
       : status = AttendanceStatus.none,
         overtimeMinutes = 0,
+        workUnits = null,
         clear = true;
 }
 
-/// Bảng chọn đầy đủ cho một nhân viên: đủ công / nửa công / nghỉ / xoá chấm.
+/// Bảng chọn đầy đủ cho một nhân viên: đủ công / nửa công / tuỳ chỉnh / nghỉ
+/// / xoá chấm.
 ///
 /// Chạm nhanh vào chip trạng thái ở danh sách vẫn chỉ đổi qua lại Đi làm và
 /// Nghỉ cho nhanh tay. Bảng này dành cho các trường hợp còn lại.
@@ -34,6 +40,8 @@ Future<AttendanceChoice?> showStatusPicker(
   required String employeeName,
   required AttendanceStatus current,
   required int currentOvertime,
+  required double currentWorkUnits,
+  required int workHoursPerDay,
   required String dateLabel,
 }) {
   return showModalBottomSheet<AttendanceChoice>(
@@ -44,6 +52,8 @@ Future<AttendanceChoice?> showStatusPicker(
       employeeName: employeeName,
       current: current,
       currentOvertime: currentOvertime,
+      currentWorkUnits: currentWorkUnits,
+      workHoursPerDay: workHoursPerDay,
       dateLabel: dateLabel,
     ),
   );
@@ -53,12 +63,16 @@ class _StatusPickerSheet extends StatelessWidget {
   final String employeeName;
   final AttendanceStatus current;
   final int currentOvertime;
+  final double currentWorkUnits;
+  final int workHoursPerDay;
   final String dateLabel;
 
   const _StatusPickerSheet({
     required this.employeeName,
     required this.current,
     required this.currentOvertime,
+    required this.currentWorkUnits,
+    required this.workHoursPerDay,
     required this.dateLabel,
   });
 
@@ -103,6 +117,7 @@ class _StatusPickerSheet extends StatelessWidget {
                 AppColors.presentSoft, Icons.check_circle_rounded),
             _option(context, AttendanceStatus.half, AppColors.info,
                 AppColors.infoSoft, Icons.timelapse_rounded),
+            _customOption(context),
             _option(context, AttendanceStatus.absent, AppColors.absent,
                 AppColors.absentSoft, Icons.cancel_rounded),
 
@@ -200,6 +215,155 @@ class _StatusPickerSheet extends StatelessWidget {
     );
   }
 
+  /// Tuỳ chỉnh không có số công cố định như ba lựa chọn kia nên chạm vào
+  /// không đóng bảng ngay - mở tiếp một hộp nhập số giờ đã làm, quy đổi ra
+  /// công theo "Số giờ công/ngày" ở Cài đặt rồi mới đóng bảng với kết quả đó.
+  Widget _customOption(BuildContext context) {
+    final selected = current == AttendanceStatus.custom;
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Material(
+        color: selected ? AppColors.customSoft : AppColors.background,
+        borderRadius: BorderRadius.circular(12),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(12),
+          onTap: () async {
+            final units = await _askCustomHours(context);
+            if (units == null || !context.mounted) return;
+            Navigator.of(context).pop(
+              AttendanceChoice(
+                status: AttendanceStatus.custom,
+                overtimeMinutes: currentOvertime,
+                workUnits: units,
+              ),
+            );
+          },
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: selected ? AppColors.custom : Colors.transparent,
+                width: 1.4,
+              ),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.hourglass_bottom_rounded,
+                    size: 22, color: AppColors.custom),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        AttendanceStatus.custom.label,
+                        style: TextStyle(
+                          fontSize: 15.5,
+                          fontWeight: FontWeight.w700,
+                          color: selected
+                              ? AppColors.custom
+                              : AppColors.textDark,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        selected
+                            ? 'Đang chấm ${Fmt.customWorkHours(currentWorkUnits, workHoursPerDay)} · chạm để sửa'
+                            : AttendanceStatus.custom.hint,
+                        style: const TextStyle(
+                          fontSize: 12.5,
+                          color: AppColors.textMuted,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                if (selected)
+                  const Icon(Icons.check_rounded,
+                      size: 20, color: AppColors.custom),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Hộp nhập số giờ đã làm, quy đổi ra công theo [workHoursPerDay] (làm
+  /// tròn về mốc 5 phút trước khi quy đổi). Trả về số công, hoặc null nếu
+  /// người dùng bấm Huỷ.
+  Future<double?> _askCustomHours(BuildContext context) {
+    final initialHours = current == AttendanceStatus.custom
+        ? currentWorkUnits * workHoursPerDay
+        : 0.0;
+    final controller = TextEditingController(
+      text: initialHours > 0 ? Fmt.workUnits(initialHours) : '',
+    );
+    return showDialog<double>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.surface,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text(
+          'Nhập số giờ đã làm',
+          style: TextStyle(
+            fontSize: 17,
+            fontWeight: FontWeight.w700,
+            color: AppColors.textDark,
+          ),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            TextField(
+              controller: controller,
+              autofocus: true,
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              decoration: const InputDecoration(
+                hintText: 'Ví dụ: 5.5',
+                suffixText: 'giờ',
+              ),
+            ),
+            const SizedBox(height: 10),
+            Text(
+              'Một ngày làm đủ tính $workHoursPerDay giờ. App tự quy đổi số '
+              'giờ vừa nhập ra công để tính lương, làm tròn về mốc 5 phút.',
+              style: const TextStyle(fontSize: 12.5, color: AppColors.textMuted),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            style: TextButton.styleFrom(foregroundColor: AppColors.textMuted),
+            child: const Text('Huỷ'),
+          ),
+          TextButton(
+            onPressed: () {
+              final hours =
+                  double.tryParse(controller.text.trim().replaceAll(',', '.'));
+              if (hours == null || hours <= 0 || workHoursPerDay <= 0) {
+                Navigator.of(ctx).pop();
+                return;
+              }
+              // Làm tròn về mốc 5 phút như ô nhập tăng ca, tối đa số giờ
+              // chuẩn một ngày (làm quá số giờ đó thì chọn "Đi làm" rồi nhập
+              // riêng phần dư ra ở tăng ca).
+              final maxMinutes = workHoursPerDay * 60;
+              final minutes = ((hours * 60).round() / 5).round() * 5;
+              final cappedMinutes = minutes.clamp(5, maxMinutes);
+              Navigator.of(ctx).pop(cappedMinutes / maxMinutes);
+            },
+            child: const Text('Xong'),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _clearButton(BuildContext context) {
     return Material(
       color: AppColors.background,
@@ -281,6 +445,13 @@ Future<void> showAttendanceHelp(BuildContext context) {
               'Có đến làm nhưng về giữa chừng. Tính 0,5 công.',
             ),
             _helpRow(
+              AppColors.custom,
+              AppColors.customSoft,
+              'Tuỳ chỉnh',
+              'Làm không tròn nửa ngày (ví dụ 5-6 tiếng). Nhập số giờ đã '
+                  'làm, app tự quy đổi ra số công và tính lương theo đó.',
+            ),
+            _helpRow(
               AppColors.absent,
               AppColors.absentSoft,
               'Nghỉ',
@@ -307,8 +478,8 @@ Future<void> showAttendanceHelp(BuildContext context) {
               'Chạm vào ô trạng thái để đổi nhanh giữa Đi làm và Nghỉ.',
             ),
             const _Bullet(
-              'Chạm vào nút mũi tên ⌄ ở cuối dòng để chọn Nửa công hoặc bỏ '
-              'chấm công nếu lỡ bấm nhầm.',
+              'Chạm vào nút mũi tên ⌄ ở cuối dòng để chọn Nửa công, Tuỳ '
+              'chỉnh (nhập số giờ) hoặc bỏ chấm công nếu lỡ bấm nhầm.',
             ),
             const _Bullet(
               'Chạm vào ô giờ bên phải để nhập tăng ca. Tăng ca ghi riêng, '

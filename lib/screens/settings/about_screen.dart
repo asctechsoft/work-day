@@ -13,7 +13,12 @@ class AboutScreen extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(title: const Text('Giới thiệu ứng dụng')),
       body: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 24, 16, 28),
+        padding: EdgeInsets.fromLTRB(
+          16,
+          24,
+          16,
+          28 + MediaQuery.viewPaddingOf(context).bottom,
+        ),
         children: [
           const Center(child: AppLogo(size: 88)),
           const SizedBox(height: 16),

@@ -8,7 +8,8 @@ class AppSettings {
   /// Các mốc OT nhanh tính bằng phút, mặc định 30/60/90/120.
   final List<int> otPresets;
 
-  /// Số giờ một ngày làm việc - chỉ dùng để gợi ý đơn giá OT.
+  /// Số giờ một ngày làm việc. Dùng để gợi ý đơn giá OT, và để quy đổi số
+  /// giờ đã làm ra số công khi chấm công Tuỳ chỉnh (§0.4 CLAUDE.md).
   final int workHoursPerDay;
 
   /// Lương/ngày mặc định khi thêm nhân viên mới.

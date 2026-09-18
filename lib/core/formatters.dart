@@ -115,6 +115,15 @@ class Fmt {
     final s = units.toStringAsFixed(1);
     return s.endsWith('.0') ? s.substring(0, s.length - 2) : s;
   }
+
+  /// Số giờ làm thực tế của một ngày Tuỳ chỉnh, quy từ số công theo
+  /// [workHoursPerDay] - viết theo giờ + phút như [otHours] ("6h", "5h30"),
+  /// không quy ngược ra số công để tránh nhầm giữa "giờ" và "ngày công".
+  static String customWorkHours(double workUnits, int workHoursPerDay) {
+    final rawMinutes = (workUnits * workHoursPerDay * 60).round();
+    final minutes = (rawMinutes / 5).round() * 5;
+    return otHours(minutes);
+  }
 }
 
 /// Định dạng ô nhập tiền theo kiểu 1.000.000 khi người dùng gõ.

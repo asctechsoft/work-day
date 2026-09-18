@@ -50,7 +50,8 @@ class AttendanceActions {
     if (!_guardEditable(context)) return;
     final next = switch (current?.status) {
       AttendanceStatus.present ||
-      AttendanceStatus.half =>
+      AttendanceStatus.half ||
+      AttendanceStatus.custom =>
         AttendanceStatus.absent,
       _ => AttendanceStatus.present,
     };
@@ -74,6 +75,8 @@ class AttendanceActions {
       employeeName: e.name,
       current: current?.status ?? AttendanceStatus.none,
       currentOvertime: current?.overtimeMinutes ?? 0,
+      currentWorkUnits: current?.workUnits ?? 0,
+      workHoursPerDay: settings.workHoursPerDay,
       dateLabel: Fmt.fullDate(date),
     );
     if (choice == null || !context.mounted) return;
@@ -97,6 +100,7 @@ class AttendanceActions {
       e,
       status: choice.status,
       overtimeMinutes: choice.overtimeMinutes,
+      workUnits: choice.workUnits,
     );
   }
 
@@ -123,6 +127,9 @@ class AttendanceActions {
               ? AttendanceStatus.present
               : current.status,
       overtimeMinutes: minutes,
+      // Giữ nguyên số công Tuỳ chỉnh đang có - không thì sửa OT sẽ vô tình
+      // xoá luôn số công đã nhập.
+      workUnits: current?.workUnits,
     );
   }
 
@@ -131,6 +138,7 @@ class AttendanceActions {
     Employee e, {
     required AttendanceStatus status,
     required int overtimeMinutes,
+    double? workUnits,
   }) async {
     try {
       await data.saveRecord(
@@ -139,6 +147,7 @@ class AttendanceActions {
           day: date,
           status: status,
           overtimeMinutes: overtimeMinutes,
+          workUnits: workUnits,
         ),
       );
     } catch (err) {

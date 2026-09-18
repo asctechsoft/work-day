@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../core/firebase_env.dart';
 import '../core/theme.dart';
 import '../services/auth_service.dart';
+import '../services/remote_config_service.dart';
 import 'auth_gate.dart';
 
 /// Màn chào lúc mở app.
@@ -70,6 +71,10 @@ class _SplashScreenState extends State<SplashScreen> {
 
     // Nếu lần trước không chọn "Lưu đăng nhập" thì bắt đăng nhập lại.
     await AuthService.instance.applyRememberPolicyOnStart();
+
+    // Giá gói ở IapScreen - fetch một lần ở đây để màn đó đọc đồng bộ, không
+    // cần chờ riêng (xem RemoteConfigService).
+    await RemoteConfigService.instance.init();
   }
 
   @override

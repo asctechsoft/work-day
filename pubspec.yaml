@@ -42,6 +42,7 @@ dependencies:
   share_plus: ^13.3.0
   path_provider: ^2.1.6
   url_launcher: ^6.3.2
+  firebase_remote_config: ^6.6.0
 
 dev_dependencies:
   flutter_test:

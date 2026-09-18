@@ -12,13 +12,20 @@ enum AttendanceStatus {
   half,
 
   /// Nghỉ = 0 công.
-  absent;
+  absent,
+
+  /// Làm không tròn nửa ngày (ví dụ 5-6 tiếng) - số công nhập tay theo giờ
+  /// làm thực tế, không cố định như ba trạng thái trên. Số công thật của
+  /// một bản ghi Tuỳ chỉnh nằm ở `AttendanceRecord.workUnits`, không nằm ở
+  /// enum này (xem ghi chú ở `workUnits` bên dưới).
+  custom;
 
   String get label => switch (this) {
         AttendanceStatus.none => 'Chưa chấm',
         AttendanceStatus.present => 'Đi làm',
         AttendanceStatus.half => 'Nửa công',
         AttendanceStatus.absent => 'Nghỉ',
+        AttendanceStatus.custom => 'Tuỳ chỉnh',
       };
 
   /// Mô tả ngắn hiện trong bảng chọn trạng thái.
@@ -27,22 +34,21 @@ enum AttendanceStatus {
         AttendanceStatus.present => 'Làm đủ ngày · 1 công',
         AttendanceStatus.half => 'Về giữa chừng · 0,5 công',
         AttendanceStatus.absent => 'Không đi làm · 0 công',
+        AttendanceStatus.custom => 'Làm không tròn nửa ngày · nhập theo giờ',
       };
 
-  /// Số công tương ứng. Đây là nguồn duy nhất quyết định số công của
-  /// một trạng thái - đừng tính lại ở chỗ khác.
+  /// Số công tương ứng của ba trạng thái cố định - nguồn duy nhất quyết
+  /// định số công của chúng, đừng tính lại ở chỗ khác.
+  ///
+  /// Riêng Tuỳ chỉnh không có số công cố định: giá trị thật nằm ở
+  /// `AttendanceRecord.workUnits` do người dùng nhập (quy đổi từ số giờ
+  /// làm), đọc trực tiếp ở đó - giá trị `0` trả về ở đây chỉ là mặc định an
+  /// toàn, không được dùng để tính lương.
   double get workUnits => switch (this) {
         AttendanceStatus.present => 1,
         AttendanceStatus.half => 0.5,
         AttendanceStatus.none || AttendanceStatus.absent => 0,
-      };
-
-  /// Ký hiệu trong file bảng công xuất ra Excel.
-  String get exportMark => switch (this) {
-        AttendanceStatus.present => 'X',
-        AttendanceStatus.half => '1/2',
-        AttendanceStatus.absent => 'N',
-        AttendanceStatus.none => '',
+        AttendanceStatus.custom => 0,
       };
 
   String get code => switch (this) {
@@ -50,12 +56,14 @@ enum AttendanceStatus {
         AttendanceStatus.present => 'PRESENT',
         AttendanceStatus.half => 'HALF',
         AttendanceStatus.absent => 'ABSENT',
+        AttendanceStatus.custom => 'CUSTOM',
       };
 
   static AttendanceStatus fromCode(String? code) => switch (code) {
         'PRESENT' => AttendanceStatus.present,
         'HALF' => AttendanceStatus.half,
         'ABSENT' => AttendanceStatus.absent,
+        'CUSTOM' => AttendanceStatus.custom,
         _ => AttendanceStatus.none,
       };
 }
@@ -116,9 +124,13 @@ class AttendanceRecord {
         'updatedAt': FieldValue.serverTimestamp(),
       };
 
+  /// [workUnits] chỉ có tác dụng khi [status] (hoặc trạng thái hiện tại nếu
+  /// không đổi) là Tuỳ chỉnh - ba trạng thái còn lại luôn lấy đúng số công
+  /// cố định của chúng, bất kể có truyền gì vào đây.
   AttendanceRecord copyWith({
     AttendanceStatus? status,
     int? overtimeMinutes,
+    double? workUnits,
   }) {
     final s = status ?? this.status;
     return AttendanceRecord(
@@ -126,17 +138,23 @@ class AttendanceRecord {
       workDate: workDate,
       month: month,
       status: s,
-      workUnits: s.workUnits,
+      workUnits:
+          s == AttendanceStatus.custom ? (workUnits ?? this.workUnits) : s.workUnits,
       overtimeMinutes: overtimeMinutes ?? this.overtimeMinutes,
     );
   }
 
   /// Dựng bản ghi mới cho một nhân viên trong một ngày.
+  ///
+  /// [workUnits] bắt buộc phải truyền khi [status] là Tuỳ chỉnh (số công quy
+  /// đổi từ số giờ làm thực tế) - ba trạng thái còn lại tự lấy số công cố
+  /// định của mình, bỏ qua tham số này.
   factory AttendanceRecord.forDay({
     required String employeeId,
     required DateTime day,
     required AttendanceStatus status,
     int overtimeMinutes = 0,
+    double? workUnits,
   }) {
     final d = DateTime(day.year, day.month, day.day);
     return AttendanceRecord(
@@ -145,7 +163,8 @@ class AttendanceRecord {
           '${d.year}-${_p2(d.month)}-${_p2(d.day)}',
       month: '${d.year}-${_p2(d.month)}',
       status: status,
-      workUnits: status.workUnits,
+      workUnits:
+          status == AttendanceStatus.custom ? (workUnits ?? 0) : status.workUnits,
       overtimeMinutes: overtimeMinutes < 0 ? 0 : overtimeMinutes,
     );
   }
@@ -162,6 +181,12 @@ class MonthlySummary {
   /// Số ngày chấm Nửa công.
   final int halfDays;
 
+  /// Số ngày chấm Tuỳ chỉnh (làm không tròn nửa ngày).
+  final int customDays;
+
+  /// Số ngày đi làm đủ (Đi làm = 1 công).
+  final int presentDays;
+
   final int overtimeMinutes;
   final double dailySalary;
   final double otRate;
@@ -174,13 +199,12 @@ class MonthlySummary {
     required this.dailySalary,
     required this.otRate,
     this.halfDays = 0,
+    this.customDays = 0,
+    this.presentDays = 0,
   });
 
-  /// Số ngày đi làm đủ. Suy ra từ tổng công vì nửa công chỉ tính 0,5.
-  int get presentDays => (totalWorkUnits - halfDays * 0.5).round();
-
-  /// Số ngày đã chấm (đủ công + nửa công + nghỉ).
-  int get markedDays => presentDays + halfDays + absentDays;
+  /// Số ngày đã chấm (đủ công + nửa công + tuỳ chỉnh + nghỉ).
+  int get markedDays => presentDays + halfDays + customDays + absentDays;
 
   /// Lương công = Tổng công × Lương/ngày
   double get basePay => totalWorkUnits * dailySalary;
