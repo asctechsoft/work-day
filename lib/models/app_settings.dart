@@ -23,6 +23,15 @@ class AppSettings {
   /// 26 = kỳ lương chạy từ ngày 26 tháng trước đến ngày 25 tháng này.
   final int payPeriodStartDay;
 
+  /// Có nhắc chấm công cuối ngày không - xem `services/notification_service.dart`.
+  final bool remindEnabled;
+
+  /// Giờ nhắc (0..23), mặc định 18h.
+  final int remindHour;
+
+  /// Phút nhắc (0..59, làm tròn về mốc 5 phút ở UI), mặc định 0.
+  final int remindMinute;
+
   const AppSettings({
     this.orgName = 'WorkDay',
     this.currency = 'VND',
@@ -31,6 +40,9 @@ class AppSettings {
     this.defaultDailySalary = 200000,
     this.defaultOtRate = 50000,
     this.payPeriodStartDay = 1,
+    this.remindEnabled = true,
+    this.remindHour = 18,
+    this.remindMinute = 0,
   });
 
   factory AppSettings.fromMap(Map<String, dynamic>? d) {
@@ -51,6 +63,9 @@ class AppSettings {
       defaultOtRate: (d['defaultOtRate'] as num?)?.toDouble() ?? 50000,
       payPeriodStartDay:
           ((d['payPeriodStartDay'] as num?)?.toInt() ?? 1).clamp(1, 28),
+      remindEnabled: (d['remindEnabled'] as bool?) ?? true,
+      remindHour: ((d['remindHour'] as num?)?.toInt() ?? 18).clamp(0, 23),
+      remindMinute: ((d['remindMinute'] as num?)?.toInt() ?? 0).clamp(0, 59),
     );
   }
 
@@ -62,6 +77,9 @@ class AppSettings {
         'defaultDailySalary': defaultDailySalary,
         'defaultOtRate': defaultOtRate,
         'payPeriodStartDay': payPeriodStartDay,
+        'remindEnabled': remindEnabled,
+        'remindHour': remindHour,
+        'remindMinute': remindMinute,
         'updatedAt': FieldValue.serverTimestamp(),
       };
 
@@ -73,6 +91,9 @@ class AppSettings {
     double? defaultDailySalary,
     double? defaultOtRate,
     int? payPeriodStartDay,
+    bool? remindEnabled,
+    int? remindHour,
+    int? remindMinute,
   }) =>
       AppSettings(
         orgName: orgName ?? this.orgName,
@@ -82,5 +103,8 @@ class AppSettings {
         defaultDailySalary: defaultDailySalary ?? this.defaultDailySalary,
         defaultOtRate: defaultOtRate ?? this.defaultOtRate,
         payPeriodStartDay: payPeriodStartDay ?? this.payPeriodStartDay,
+        remindEnabled: remindEnabled ?? this.remindEnabled,
+        remindHour: remindHour ?? this.remindHour,
+        remindMinute: remindMinute ?? this.remindMinute,
       );
 }

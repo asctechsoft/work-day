@@ -1,4 +1,10 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Android 13+ (API 33) bắt buộc quyền này để hiện thông báo - dùng cho
+         "Nhắc chấm công cuối ngày" (xem lib/services/notification_service.dart).
+         flutter_local_notifications tự xin quyền lúc chạy qua
+         requestNotificationsPermission(), khai ở đây chỉ để Android biết app
+         CÓ THỂ xin quyền này. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <application
         android:label="${appLabel}"
         android:name="${applicationName}"

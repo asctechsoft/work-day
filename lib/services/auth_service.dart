@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'data_service.dart';
+import 'notification_service.dart';
 
 /// Đăng nhập / đăng ký. **Mỗi tài khoản là chủ của đúng một cơ sở**, và
 /// `companyId` của cơ sở đó chính là `uid` của tài khoản (xem
@@ -190,6 +191,9 @@ class AuthService {
   Future<void> signOut() async {
     final p = await SharedPreferences.getInstance();
     await p.setBool(_kRemember, false);
+    // Huỷ lịch "Nhắc chấm công cuối ngày" của cơ sở này - không huỷ thì tài
+    // khoản đăng nhập sau trên cùng máy vẫn bị nhắc theo giờ của cơ sở cũ.
+    await NotificationService.instance.cancel();
     await _auth.signOut();
   }
 

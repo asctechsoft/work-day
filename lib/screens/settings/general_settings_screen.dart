@@ -8,6 +8,8 @@ import '../../core/theme.dart';
 import '../../models/app_settings.dart';
 import '../../services/data_service.dart';
 import '../../widgets/common.dart';
+import 'remind_time_sheet.dart';
+import 'start_day_sheet.dart';
 
 /// Thiết lập chung: tên cơ sở, tiền tệ, mốc OT nhanh, giờ làm mỗi ngày.
 class GeneralSettingsScreen extends StatefulWidget {
@@ -25,6 +27,9 @@ class _GeneralSettingsScreenState extends State<GeneralSettingsScreen> {
   AppSettings _settings = const AppSettings();
   late List<int> _presets;
   int _startDay = 1;
+  bool _remindEnabled = true;
+  int _remindHour = 18;
+  int _remindMinute = 0;
   bool _loaded = false;
   bool _busy = false;
 
@@ -60,6 +65,9 @@ class _GeneralSettingsScreenState extends State<GeneralSettingsScreen> {
     return name != _settings.orgName ||
         hours != _settings.workHoursPerDay ||
         _startDay != _settings.payPeriodStartDay ||
+        _remindEnabled != _settings.remindEnabled ||
+        _remindHour != _settings.remindHour ||
+        _remindMinute != _settings.remindMinute ||
         !listEquals(presets, saved);
   }
 
@@ -77,6 +85,9 @@ class _GeneralSettingsScreenState extends State<GeneralSettingsScreen> {
       _hours.text = '${s.workHoursPerDay}';
       _presets = List<int>.from(s.otPresets);
       _startDay = s.payPeriodStartDay;
+      _remindEnabled = s.remindEnabled;
+      _remindHour = s.remindHour;
+      _remindMinute = s.remindMinute;
       _loaded = true;
     });
   }
@@ -102,6 +113,9 @@ class _GeneralSettingsScreenState extends State<GeneralSettingsScreen> {
         workHoursPerDay: hours.clamp(1, 24),
         otPresets: (_presets.toList()..sort()),
         payPeriodStartDay: _startDay,
+        remindEnabled: _remindEnabled,
+        remindHour: _remindHour,
+        remindMinute: _remindMinute,
       );
       await _data.saveSettings(next);
       if (!mounted) return;
@@ -213,6 +227,25 @@ class _GeneralSettingsScreenState extends State<GeneralSettingsScreen> {
     final minutes = (entered.clamp(0, 24 * 60) / 5).round() * 5;
     if (minutes <= 0 || _presets.contains(minutes)) return;
     setState(() => _presets = [..._presets, minutes]..sort());
+  }
+
+  Future<void> _pickStartDay() async {
+    final picked = await showStartDaySheet(context, selected: _startDay);
+    if (picked == null || !mounted) return;
+    setState(() => _startDay = picked);
+  }
+
+  Future<void> _pickRemindTime() async {
+    final picked = await showRemindTimeSheet(
+      context,
+      hour: _remindHour,
+      minute: _remindMinute,
+    );
+    if (picked == null || !mounted) return;
+    setState(() {
+      _remindHour = picked.$1;
+      _remindMinute = picked.$2;
+    });
   }
 
   @override
@@ -332,32 +365,39 @@ class _GeneralSettingsScreenState extends State<GeneralSettingsScreen> {
                               ),
                             ),
                           ),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 12),
-                            decoration: BoxDecoration(
-                              color: AppColors.background,
+                          Material(
+                            color: AppColors.background,
+                            borderRadius: BorderRadius.circular(10),
+                            child: InkWell(
                               borderRadius: BorderRadius.circular(10),
-                              border: Border.all(color: AppColors.border),
-                            ),
-                            child: DropdownButtonHideUnderline(
-                              child: DropdownButton<int>(
-                                value: _startDay,
-                                isDense: true,
-                                borderRadius: BorderRadius.circular(12),
-                                style: const TextStyle(
-                                  fontSize: 15,
-                                  fontWeight: FontWeight.w700,
-                                  color: AppColors.textDark,
+                              onTap: _pickStartDay,
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 10,
                                 ),
-                                items: [
-                                  for (var d = 1; d <= 28; d++)
-                                    DropdownMenuItem(
-                                      value: d,
-                                      child: Text('Ngày $d'),
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(10),
+                                  border: Border.all(color: AppColors.border),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Text(
+                                      'Ngày $_startDay',
+                                      style: const TextStyle(
+                                        fontSize: 15,
+                                        fontWeight: FontWeight.w700,
+                                        color: AppColors.textDark,
+                                      ),
                                     ),
-                                ],
-                                onChanged: (v) =>
-                                    setState(() => _startDay = v ?? 1),
+                                    const Icon(
+                                      Icons.keyboard_arrow_down_rounded,
+                                      size: 18,
+                                      color: AppColors.textMuted,
+                                    ),
+                                  ],
+                                ),
                               ),
                             ),
                           ),
@@ -520,6 +560,108 @@ class _GeneralSettingsScreenState extends State<GeneralSettingsScreen> {
                           ),
                         ),
                       ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 14),
+
+                AppCard(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const SectionTitle('Nhắc chấm công cuối ngày'),
+                      const SizedBox(height: 6),
+                      const Text(
+                        'Đến giờ này mà còn người trong danh sách chưa được '
+                        'chấm công hôm nay, điện thoại sẽ báo bằng một '
+                        'thông báo.',
+                        style: TextStyle(
+                          fontSize: 12.5,
+                          color: AppColors.textMuted,
+                          height: 1.4,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          const Expanded(
+                            child: Text(
+                              'Bật nhắc',
+                              style: TextStyle(
+                                fontSize: 14.5,
+                                fontWeight: FontWeight.w600,
+                                color: AppColors.textDark,
+                              ),
+                            ),
+                          ),
+                          Switch(
+                            value: _remindEnabled,
+                            activeThumbColor: AppColors.primary,
+                            onChanged: (v) =>
+                                setState(() => _remindEnabled = v),
+                          ),
+                        ],
+                      ),
+                      if (_remindEnabled) ...[
+                        const SizedBox(height: 8),
+                        Row(
+                          children: [
+                            const Expanded(
+                              child: Text(
+                                'Vào lúc',
+                                style: TextStyle(
+                                  fontSize: 14.5,
+                                  fontWeight: FontWeight.w600,
+                                  color: AppColors.textDark,
+                                ),
+                              ),
+                            ),
+                            Material(
+                              color: AppColors.background,
+                              borderRadius: BorderRadius.circular(10),
+                              child: InkWell(
+                                borderRadius: BorderRadius.circular(10),
+                                onTap: _pickRemindTime,
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 12,
+                                    vertical: 10,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    borderRadius: BorderRadius.circular(10),
+                                    border: Border.all(color: AppColors.border),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      const Icon(
+                                        Icons.access_time_rounded,
+                                        size: 16,
+                                        color: AppColors.textDark,
+                                      ),
+                                      const SizedBox(width: 6),
+                                      Text(
+                                        '${_remindHour.toString().padLeft(2, '0')}:'
+                                        '${_remindMinute.toString().padLeft(2, '0')}',
+                                        style: const TextStyle(
+                                          fontSize: 15,
+                                          fontWeight: FontWeight.w700,
+                                          color: AppColors.textDark,
+                                        ),
+                                      ),
+                                      const Icon(
+                                        Icons.keyboard_arrow_down_rounded,
+                                        size: 18,
+                                        color: AppColors.textMuted,
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
                     ],
                   ),
                 ),

@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../core/firebase_env.dart';
 import '../core/theme.dart';
 import '../services/auth_service.dart';
+import '../services/notification_service.dart';
 import '../services/remote_config_service.dart';
 import 'auth_gate.dart';
 
@@ -71,6 +72,11 @@ class _SplashScreenState extends State<SplashScreen> {
 
     // Nếu lần trước không chọn "Lưu đăng nhập" thì bắt đăng nhập lại.
     await AuthService.instance.applyRememberPolicyOnStart();
+
+    // Khởi tạo plugin thông báo + WorkManager cho tính năng "Nhắc chấm công
+    // cuối ngày" (xem NotificationService) - không đụng Firestore nên làm ở
+    // đây được luôn, không cần chờ đăng nhập.
+    await NotificationService.instance.init();
 
     // Giá gói ở IapScreen - fetch một lần ở đây để màn đó đọc đồng bộ, không
     // cần chờ riêng (xem RemoteConfigService).

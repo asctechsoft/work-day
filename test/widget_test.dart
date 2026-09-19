@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:tick_go/core/formatters.dart';
 import 'package:tick_go/core/lunar.dart';
 import 'package:tick_go/core/pay_period.dart';
+import 'package:tick_go/models/app_settings.dart';
 import 'package:tick_go/models/attendance_record.dart';
 import 'package:tick_go/models/employee.dart';
 import 'package:tick_go/services/auth_service.dart';
@@ -612,6 +613,29 @@ void main() {
       expect(AuthService.isSuperAccount({}), isFalse);
       // Không có role thì là chủ cơ sở thường - đây là trường hợp phổ biến nhất.
       expect(AuthService.isSuperAccount({'companyId': 'abc'}), isFalse);
+    });
+  });
+
+  group('Nhắc chấm công cuối ngày', () {
+    test('mặc định bật, hẹn 18h00 khi cơ sở chưa từng lưu thiết lập', () {
+      final s = AppSettings.fromMap(null);
+      expect(s.remindEnabled, isTrue);
+      expect(s.remindHour, 18);
+      expect(s.remindMinute, 0);
+    });
+
+    test('ghi xuống rồi đọc lại đúng giờ đã chọn', () {
+      const s = AppSettings(remindEnabled: false, remindHour: 20, remindMinute: 30);
+      final back = AppSettings.fromMap(s.toMap());
+      expect(back.remindEnabled, isFalse);
+      expect(back.remindHour, 20);
+      expect(back.remindMinute, 30);
+    });
+
+    test('giờ / phút đọc từ dữ liệu cũ bị ép về khoảng hợp lệ', () {
+      final s = AppSettings.fromMap({'remindHour': 99, 'remindMinute': -5});
+      expect(s.remindHour, 23);
+      expect(s.remindMinute, 0);
     });
   });
 }

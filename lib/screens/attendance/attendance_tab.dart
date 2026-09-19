@@ -135,22 +135,25 @@ class _AttendanceTabState extends State<AttendanceTab> {
       );
       if (!mounted) return;
 
-      ScaffoldMessenger.of(context)
-        ..hideCurrentSnackBar()
-        ..showSnackBar(
-          SnackBar(
-            content: Text(
-              'Đã chấm đi làm cho ${employees.length} nhân viên',
-            ),
-            backgroundColor: AppColors.textDark,
-            duration: const Duration(seconds: 6),
-            action: SnackBarAction(
-              label: 'Hoàn tác',
-              textColor: Colors.white,
-              onPressed: () => _undoMarkAll(day, employees, before),
-            ),
+      final messenger = ScaffoldMessenger.of(context);
+      messenger.hideCurrentSnackBar();
+      const snackDuration = Duration(seconds: 4);
+      final controller = messenger.showSnackBar(
+        SnackBar(
+          content: Text('Đã chấm đi làm cho ${employees.length} nhân viên'),
+          backgroundColor: AppColors.textDark,
+          duration: snackDuration,
+          action: SnackBarAction(
+            label: 'Hoàn tác',
+            textColor: Colors.white,
+            onPressed: () => _undoMarkAll(day, employees, before),
           ),
-        );
+        ),
+      );
+      // Máy bật hỗ trợ tiếp cận (TalkBack...) thì Flutter cố ý không tự ẩn
+      // SnackBar theo `duration` nữa, bắt vuốt tay - tự hẹn giờ đóng để vẫn
+      // ẩn đúng lúc như thiết kế.
+      Timer(snackDuration, controller.close);
     } catch (err) {
       if (mounted) showToast(context, 'Không lưu được: $err', error: true);
     } finally {

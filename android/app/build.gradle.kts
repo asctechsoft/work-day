@@ -14,6 +14,9 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
+        // flutter_local_notifications (Nhắc chấm công cuối ngày) đòi hỏi bật
+        // desugaring core library - không bật là Gradle chặn ngay lúc build.
+        isCoreLibraryDesugaringEnabled = true
     }
 
     kotlinOptions {
@@ -71,4 +74,9 @@ android {
 
 flutter {
     source = "../.."
+}
+
+dependencies {
+    // Bắt buộc đi kèm isCoreLibraryDesugaringEnabled ở trên.
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
 }

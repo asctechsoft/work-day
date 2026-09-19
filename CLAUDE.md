@@ -166,7 +166,9 @@ lib/
 │   ├── auth_service.dart        đăng nhập · đăng ký cơ sở · đổi mật khẩu
 │   ├── data_service.dart        TOÀN BỘ truy cập Firestore + summarize()
 │   │                            (mọi đường dẫn qua companies/{companyId})
-│   └── export_service.dart      xuất bảng công ra .xlsx rồi mở khay chia sẻ
+│   ├── export_service.dart      xuất bảng công ra .xlsx rồi mở khay chia sẻ
+│   └── notification_service.dart nhắc chấm công cuối ngày (workmanager +
+│                                flutter_local_notifications, xem §5.6)
 ├── widgets/
 │   ├── common.dart              EmployeeAvatar · StatTile · StatRow · StatGrid
 │   │                            · GradientButton
@@ -248,8 +250,10 @@ tự đặt — quên truyền một lần là bản test ghi thẳng vào dữ 
   nên không thể lệch với google-services.json mà Gradle đã nhúng.
   `lib/firebase_options.dart` = prod, `lib/firebase_options_dev.dart` = dev
   (chỉ Android; nền tảng khác **ném lỗi** thay vì rơi về prod).
-- **MỌI** `Firebase.initializeApp` phải dùng `firebaseOptions`; hiện chỉ có một
-  chỗ là `SplashScreen._bootstrap`. Thêm FirebaseApp phụ nào cũng phải truyền
+- **MỌI** `Firebase.initializeApp` phải dùng `firebaseOptions`. Có hai chỗ:
+  `SplashScreen._bootstrap` (luồng chính) và isolate nền của
+  `notification_service.dart` (§5.6, tự khởi tạo lại vì isolate nền không
+  chia sẻ state với app đang mở). Thêm FirebaseApp phụ nào cũng phải truyền
   options này.
 - Không truyền `--flavor` thì `appFlavor == null` → rơi về **prod**. Vì vậy
   `--flavor` là bắt buộc; VS Code đã có sẵn 4 cấu hình trong `.vscode/launch.json`.
@@ -276,7 +280,7 @@ Dữ liệu của mỗi cơ sở nằm gọn trong một nhánh. `{cid}` = `comp
 | `companies` | `{cid}` | `orgName`, `ownerAccount`, `active`, `createdAt` |
 | `companies/{cid}/employees` | tự sinh | `name`, `nameLower`, `dailySalary`, `otRate`, `phone`, `active`, `createdAt` |
 | `companies/{cid}/attendance` | `{employeeId}_{yyyy-MM-dd}` | `employeeId`, `workDate`, `month`, `status`, `workUnits`, `overtimeMinutes`, `updatedAt` |
-| `companies/{cid}/settings` | `app` | `orgName`, `currency`, `otPresets`, `workHoursPerDay`, `defaultDailySalary`, `defaultOtRate`, `payPeriodStartDay` |
+| `companies/{cid}/settings` | `app` | `orgName`, `currency`, `otPresets`, `workHoursPerDay`, `defaultDailySalary`, `defaultOtRate`, `payPeriodStartDay`, `remindEnabled`, `remindHour`, `remindMinute` |
 | `companies/{cid}/reviews` | tự sinh | `stars` (1..5), `comment`, `appVersion`, `createdAt` |
 | `users` | `{uid}` | `account`, `displayName`, `companyId`, `role`, `lastLoginAt` |
 
@@ -504,8 +508,9 @@ xếp theo mức độ hay dùng, **đừng gộp hết vào một bảng chọn
   lần mới về được trạng thái mong muốn, hỏng luôn mục tiêu tốc độ. Chạm chip
   của một ngày đang Tuỳ chỉnh vẫn đưa thẳng về Nghỉ (giống Nửa công), không
   quay vòng qua Đi làm trước.
-- "Tất cả đi làm" có **Hoàn tác** trong SnackBar 6 giây
+- "Tất cả đi làm" có **Hoàn tác** trong SnackBar 4 giây
   (`DataService.restoreDay`), vì một cú bấm nhầm sửa cùng lúc cả chục bản ghi.
+  Người dùng chỉnh từ 6 xuống 4 giây ngày 19/09/2026, chê 6 giây là quá lâu.
 - Bỏ chấm = **xoá hẳn document** (`clearRecord`), không phải ghi trạng thái
   `NONE`. "Chưa chấm" nghĩa là không có bản ghi.
 - Nút "?" trên thanh tiêu đề mở bảng giải thích 5 trạng thái + các thao tác
@@ -780,6 +785,67 @@ dựng thành `ReviewScreen` (cả `Scaffold`) rồi lại đổi vì người d
   chưa mở được Store thật. Lên store rồi đổi cờ thành `true` là nút mở thẳng
   `_playStoreUrl` (`url_launcher`, dependency thêm riêng cho việc này), không
   phải sửa gì khác.
+
+### 5.6. Nhắc chấm công cuối ngày (`services/notification_service.dart`)
+
+Yêu cầu người dùng 18/09/2026: đến một giờ đặt trước (mặc định **18h00**) mà
+còn người trong danh sách chưa được chấm công hôm nay thì báo bằng một thông
+báo Android (chỉ chữ). Không nằm trong đặc tả gốc nhưng cũng không thuộc danh
+sách ngoài phạm vi ở §0.9, nên làm bình thường, không cần nói "ngoài phạm vi".
+Bật/tắt và chọn giờ ở `Cài đặt → Thiết lập chung`
+(`GeneralSettingsScreen`), lưu vào `AppSettings.remindEnabled/remindHour/
+remindMinute` như mọi thiết lập khác.
+
+**Không có server**, nên việc "kiểm tra đã chấm đủ chưa" phải tự chạy trên
+máy kể cả khi app đang đóng. Cơ chế:
+
+1. `HomeShell` nghe `DataService.instance.watchSettings()` và gọi
+   `NotificationService.instance.applySettings()` mỗi khi thiết lập đổi - bật
+   thì hẹn giờ, tắt thì huỷ. Bật/tắt hoặc đổi giờ ở màn Cài đặt vì vậy **tự có
+   hiệu lực** mà màn đó không cần gọi tay: đây là kiểu StreamBuilder-đọc-thẳng-
+   Firestore quen thuộc của app (§2), không phải ngoại lệ.
+2. `applySettings()` hẹn một tác vụ `workmanager` (bọc WorkManager của
+   Android) chạy sau đúng khoảng `initialDelay` tính tới giờ đã chọn.
+   `existingWorkPolicy: replace` nên gọi lại nhiều lần (mở app nhiều lần trong
+   ngày) không sinh thêm tác vụ trùng.
+3. Tác vụ chạy trong **isolate nền riêng**, không chia sẻ bộ nhớ với app đang
+   mở (nếu có) - `_callbackDispatcher` phải tự `Firebase.initializeApp` lại từ
+   đầu (xem §5.4). Phiên đăng nhập Firebase Auth được lưu sẵn trên máy nên vẫn
+   đọc được `currentUser` dù isolate này chưa từng tự gọi `signIn`.
+4. Đếm `companies/{cid}/employees` đang `active` so với số bản ghi
+   `companies/{cid}/attendance` có `workDate` = hôm nay (đúng cách đếm "chấm
+   đủ/thiếu" đã dùng ở lịch chọn ngày, §5.2.1). Thiếu thì `.show()` một thông
+   báo cục bộ qua `flutter_local_notifications`, đủ rồi thì im lặng.
+5. Xong việc (dù có báo hay không, kể cả khi lỗi mạng) tác vụ **tự hẹn lại**
+   cho đúng giờ của ngày mai, đọc từ `SharedPreferences` chứ không phải
+   Firestore - isolate nền không có sẵn `companyId` của phiên đang chạy, và
+   đọc local tránh thêm một lượt phụ thuộc mạng chỉ để biết bật hay tắt.
+6. `AuthService.signOut()` gọi `NotificationService.instance.cancel()` trước
+   khi đăng xuất - không huỷ thì tài khoản đăng nhập sau trên cùng máy vẫn bị
+   nhắc theo giờ và dữ liệu của tài khoản trước.
+
+**Không chính xác tuyệt đối theo giây.** WorkManager không phải báo thức hẹn
+giờ chính xác (đó là việc của `AlarmManager` exact, cần quyền riêng và phiền
+người dùng không rành công nghệ hơn) - Android có thể hoãn vài phút tới vài
+chục phút nếu máy đang ở Doze sâu. Chấp nhận được vì đây chỉ là nhắc nhở bằng
+chữ (§0 - "hiện text thôi"), không phải mốc khoá sổ. Đừng đổi sang exact alarm
+để "chính xác hơn" nếu không có yêu cầu rõ ràng - đánh đổi là phải xin thêm
+quyền `SCHEDULE_EXACT_ALARM`.
+
+**Android cần hai thứ đi kèm, thiếu là Gradle chặn build hoặc thông báo không
+hiện được**:
+- `android:name="android.permission.POST_NOTIFICATIONS"` trong
+  `AndroidManifest.xml` (Android 13+). `workmanager` cũng tự khai cái này
+  trong manifest riêng của nó (merge tự động), khai thêm ở app không hại gì,
+  chỉ để rõ ràng.
+- `isCoreLibraryDesugaringEnabled = true` +
+  `coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:...")` trong
+  `android/app/build.gradle.kts` - `flutter_local_notifications` đòi hỏi
+  desugaring, thiếu là `flutter build apk` báo lỗi ngay ở bước
+  `checkXxxAarMetadata`, chưa kịp đụng tới code Dart.
+
+`workmanager`, `flutter_local_notifications` và `timezone` (phụ thuộc kéo
+theo, không dùng trực tiếp) là ba gói mới duy nhất thêm cho tính năng này.
 
 ---
 

@@ -95,7 +95,7 @@ Dữ liệu mỗi cơ sở nằm gọn trong một nhánh, `{cid}` = uid Firebas
 | `companies` | `{cid}` | `orgName`, `ownerAccount`, `active`, `createdAt` |
 | `companies/{cid}/employees` | tự sinh | `name`, `dailySalary`, `otRate`, `phone`, `active`, `createdAt` |
 | `companies/{cid}/attendance` | `{employeeId}_{yyyy-MM-dd}` | `employeeId`, `workDate`, `month`, `status`, `workUnits`, `overtimeMinutes` |
-| `companies/{cid}/settings` | `app` | `orgName`, `currency`, `otPresets`, `workHoursPerDay`, `payPeriodStartDay`, mức lương mặc định |
+| `companies/{cid}/settings` | `app` | `orgName`, `currency`, `otPresets`, `workHoursPerDay`, `payPeriodStartDay`, mức lương mặc định, `remindEnabled`/`remindHour`/`remindMinute` (giờ nhắc chấm công) |
 | `companies/{cid}/reviews` | tự sinh | Đánh giá app: `stars` (1–5), `comment`, `appVersion`, `createdAt` |
 | `users` | `{uid}` | `account`, `displayName`, `companyId`, `role`, `lastLoginAt` |
 
@@ -163,6 +163,21 @@ Tổng lương   = Lương công   + Tiền tăng ca
 Đặt đơn giá OT = 0 nếu cơ sở không trả tăng ca riêng.
 Lương **luôn tính lại** từ dữ liệu công của kỳ đang chọn — không có
 trạng thái chốt/khoá bảng lương.
+
+### Nhắc chấm công cuối ngày
+
+`Cài đặt → Thiết lập chung → Nhắc chấm công cuối ngày`: bật/tắt và chọn giờ
+nhắc, mặc định **18:00**. Đến giờ đó mà còn người trong danh sách chưa được
+chấm công hôm nay, điện thoại sẽ hiện một thông báo (chỉ chữ, không cần mở
+app). Nếu cả danh sách đã chấm đủ thì không có gì hiện ra.
+
+- Chạy hoàn toàn trên máy bằng `workmanager` (WorkManager của Android) +
+  `flutter_local_notifications` — **không cần server**. Xin quyền thông báo
+  ngay khi bật (Android 13+).
+- Không chính xác tuyệt đối theo giây: Android có thể hoãn vài phút nếu máy
+  đang tiết kiệm pin sâu — chấp nhận được vì đây chỉ là nhắc nhở.
+- Tắt tính năng, đăng xuất, hoặc đổi giờ đều có hiệu lực ngay lần mở app kế
+  tiếp (xem `lib/services/notification_service.dart`).
 
 ### Kỳ lương tuỳ chỉnh
 
@@ -262,7 +277,8 @@ lib/
 ├── services/
 │   ├── auth_service.dart           đăng nhập, đăng ký cơ sở, đổi mật khẩu
 │   ├── data_service.dart           toàn bộ truy cập Firestore + hàm tổng hợp kỳ
-│   └── export_service.dart         xuất bảng công ra .xlsx và mở khay chia sẻ
+│   ├── export_service.dart         xuất bảng công ra .xlsx và mở khay chia sẻ
+│   └── notification_service.dart   nhắc chấm công cuối ngày (workmanager + local notification)
 ├── widgets/
 │   ├── common.dart                 widget dùng chung
 │   ├── highlights_card.dart        thẻ "Đáng chú ý" (lương cao/thấp nhất...)
@@ -285,7 +301,7 @@ lib/
 
 ```bash
 flutter analyze     # không còn cảnh báo
-flutter test        # 37 test: công thức lương, quy tắc chấm công, kỳ lương, âm lịch, định dạng
+flutter test        # 46 test: công thức lương, quy tắc chấm công, kỳ lương, âm lịch, định dạng, nhắc chấm công
 ```
 
 ---
