@@ -15,10 +15,8 @@ import 'iap_screen.dart';
 import 'review_screen.dart';
 import 'salary_settings_screen.dart';
 
-/// Đường dẫn trang chính sách bảo mật - **để trống**, gắn link thật sau.
-/// Bấm vào mà còn trống thì chỉ hiện toast, không mở gì cả (tránh
-/// `Uri.parse('')` ném lỗi).
-const _privacyPolicyUrl = '';
+/// Đường dẫn trang chính sách bảo mật.
+const _privacyPolicyUrl = 'https://asctechsoft.com/privacy/policy-workday';
 
 /// Tab Cài đặt: gom toàn bộ phần quản lý dữ liệu để navigation chỉ có 3 tab.
 class SettingsTab extends StatefulWidget {
