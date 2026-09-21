@@ -117,6 +117,8 @@ class _CompanyReportScreenState extends State<CompanyReportScreen> {
             ? widget.company.orgName
             : _settings.orgName,
         workHoursPerDay: _settings.workHoursPerDay,
+        holidayDates: _settings.holidayDates.toSet(),
+        holidayPayMultiplier: _settings.holidayPayMultiplier,
       );
     } catch (e) {
       if (mounted) showToast(context, 'Không xuất được file: $e', error: true);
@@ -127,7 +129,12 @@ class _CompanyReportScreenState extends State<CompanyReportScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final summaries = DataService.summarize(_employees, _records);
+    final summaries = DataService.summarize(
+      _employees,
+      _records,
+      holidayDates: _settings.holidayDates.toSet(),
+      holidayPayMultiplier: _settings.holidayPayMultiplier,
+    );
     var totalUnits = 0.0;
     var totalOt = 0;
     var totalPay = 0.0;

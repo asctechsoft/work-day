@@ -18,11 +18,20 @@ class EmployeeMonthScreen extends StatefulWidget {
   /// Quy đổi công Tuỳ chỉnh ra giờ khi hiện lịch sử từng ngày.
   final int workHoursPerDay;
 
+  /// `AppSettings.holidayDates` - chọn đơn giá OT ngày lễ cho đúng ngày,
+  /// giống cách `DataService.summarize` dùng ở tab Tổng quan.
+  final Set<String> holidayDates;
+
+  /// `AppSettings.holidayPayMultiplier` - hệ số nhân lương công của ngày lễ.
+  final double holidayPayMultiplier;
+
   const EmployeeMonthScreen({
     super.key,
     required this.employee,
     required this.period,
     required this.workHoursPerDay,
+    this.holidayDates = const {},
+    this.holidayPayMultiplier = 1,
   });
 
   @override
@@ -63,21 +72,41 @@ class _EmployeeMonthScreenState extends State<EmployeeMonthScreen> {
           final records = snap.data ?? const <AttendanceRecord>[];
 
           var units = 0.0;
+          var unitsHoliday = 0.0;
           var absent = 0;
-          var ot = 0;
+          var otNormal = 0;
+          var otWeekend = 0;
+          var otHoliday = 0;
           for (final r in records) {
             units += r.workUnits;
+            if (widget.holidayDates.contains(r.workDate)) {
+              unitsHoliday += r.workUnits;
+            }
             if (r.status == AttendanceStatus.absent) absent++;
-            ot += r.overtimeMinutes;
+            switch (r.otDayKind(widget.holidayDates)) {
+              case OtDayKind.normal:
+                otNormal += r.overtimeMinutes;
+              case OtDayKind.weekend:
+                otWeekend += r.overtimeMinutes;
+              case OtDayKind.holiday:
+                otHoliday += r.overtimeMinutes;
+            }
           }
+          final ot = otNormal + otWeekend + otHoliday;
 
           final summary = MonthlySummary(
             employeeId: e.id,
             totalWorkUnits: units,
             absentDays: absent,
-            overtimeMinutes: ot,
+            overtimeMinutesNormal: otNormal,
+            overtimeMinutesWeekend: otWeekend,
+            overtimeMinutesHoliday: otHoliday,
             dailySalary: e.dailySalary,
             otRate: e.otRate,
+            otRateWeekend: e.otRateWeekend,
+            otRateHoliday: e.otRateHoliday,
+            workUnitsHoliday: unitsHoliday,
+            holidayPayMultiplier: widget.holidayPayMultiplier,
           );
 
           return ListView(
@@ -156,20 +185,70 @@ class _EmployeeMonthScreenState extends State<EmployeeMonthScreen> {
                   children: [
                     const SectionTitle('Tính lương'),
                     const SizedBox(height: 14),
-                    _payLine(
-                      'Lương cơ bản',
-                      '${Fmt.workUnits(units)} công × '
-                          '${Fmt.money(e.dailySalary)}',
-                      summary.basePay,
-                    ),
+                    // Có công rơi vào ngày lễ và cơ sở có đặt hệ số nhân thì
+                    // tách riêng dòng đó ra - một dòng duy nhất "units ×
+                    // dailySalary" sẽ nói sai số tiền thật khi có hệ số nhân.
+                    if (unitsHoliday <= 0 || widget.holidayPayMultiplier <= 1)
+                      _payLine(
+                        'Lương cơ bản',
+                        '${Fmt.workUnits(units)} công × '
+                            '${Fmt.money(e.dailySalary)}',
+                        summary.basePay,
+                      )
+                    else ...[
+                      _payLine(
+                        'Lương công ngày thường',
+                        '${Fmt.workUnits(units - unitsHoliday)} công × '
+                            '${Fmt.money(e.dailySalary)}',
+                        (units - unitsHoliday) * e.dailySalary,
+                      ),
+                      const SizedBox(height: 10),
+                      _payLine(
+                        'Lương công ngày lễ (x${Fmt.workUnits(widget.holidayPayMultiplier)})',
+                        '${Fmt.workUnits(unitsHoliday)} công × '
+                            '${Fmt.money(e.dailySalary)} × '
+                            '${Fmt.workUnits(widget.holidayPayMultiplier)}',
+                        unitsHoliday * e.dailySalary * widget.holidayPayMultiplier,
+                      ),
+                    ],
                     const SizedBox(height: 10),
-                    _payLine(
-                      'Tăng ca',
-                      e.otRate <= 0
-                          ? 'Không tính tiền tăng ca'
-                          : '${Fmt.otHours(ot)} × ${Fmt.money(e.otRate)}',
-                      summary.otPay,
-                    ),
+                    // Cuối tuần/lễ chỉ có đơn giá riêng khi cơ sở đặt và có
+                    // OT rơi vào đúng loại ngày đó - đa số nhân viên chỉ thấy
+                    // đúng một dòng như trước, không phải luôn ba dòng.
+                    if (otWeekend <= 0 && otHoliday <= 0)
+                      _payLine(
+                        'Tăng ca',
+                        e.otRate <= 0
+                            ? 'Không tính tiền tăng ca'
+                            : '${Fmt.otHours(ot)} × ${Fmt.money(e.otRate)}',
+                        summary.otPay,
+                      )
+                    else ...[
+                      if (otNormal > 0)
+                        _payLine(
+                          'Tăng ca ngày thường',
+                          '${Fmt.otHours(otNormal)} × ${Fmt.money(e.otRate)}',
+                          (otNormal / 60.0) * e.otRate,
+                        ),
+                      if (otNormal > 0 && (otWeekend > 0 || otHoliday > 0))
+                        const SizedBox(height: 10),
+                      if (otWeekend > 0)
+                        _payLine(
+                          'Tăng ca cuối tuần',
+                          '${Fmt.otHours(otWeekend)} × '
+                              '${Fmt.money(summary.effectiveOtRateWeekend)}',
+                          (otWeekend / 60.0) * summary.effectiveOtRateWeekend,
+                        ),
+                      if (otWeekend > 0 && otHoliday > 0)
+                        const SizedBox(height: 10),
+                      if (otHoliday > 0)
+                        _payLine(
+                          'Tăng ca ngày lễ',
+                          '${Fmt.otHours(otHoliday)} × '
+                              '${Fmt.money(summary.effectiveOtRateHoliday)}',
+                          (otHoliday / 60.0) * summary.effectiveOtRateHoliday,
+                        ),
+                    ],
                     const Divider(height: 24),
                     Row(
                       children: [

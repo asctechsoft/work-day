@@ -20,8 +20,13 @@ class IapScreen extends StatefulWidget {
 
 enum _Plan { trial, monthly, yearly }
 
+/// Chỉ hiện Gói Dùng thử, ẩn Gói Tháng/Gói Năm - theo yêu cầu người dùng
+/// 21/09/2026 (mặc định cho dùng thử trước). Đổi lại `true` khi mở bán gói
+/// trả phí, không cần xoá code hai gói đó.
+const _kShowPaidPlans = false;
+
 class _IapScreenState extends State<IapScreen> {
-  _Plan _selected = _Plan.yearly;
+  _Plan _selected = _Plan.trial;
 
   @override
   Widget build(BuildContext context) {
@@ -89,31 +94,33 @@ class _IapScreenState extends State<IapScreen> {
                     hasBackup: false,
                     hasPrioritySupport: false,
                   ),
-                  const SizedBox(height: 12),
-                  _PlanCard(
-                    selected: _selected == _Plan.monthly,
-                    onTap: () => setState(() => _selected = _Plan.monthly),
-                    title: 'Gói Tháng',
-                    price: Fmt.currency(rc.monthlyPrice),
-                    unit: '/ tháng',
-                    badgeAsset: 'assets/images/iap_1month.png',
-                    employeeLimitLabel: '50 nhân viên',
-                    hasBackup: true,
-                    hasPrioritySupport: true,
-                  ),
-                  const SizedBox(height: 12),
-                  _PlanCard(
-                    selected: _selected == _Plan.yearly,
-                    onTap: () => setState(() => _selected = _Plan.yearly),
-                    title: 'Gói Năm',
-                    price: Fmt.currency(rc.yearlyFinalPrice),
-                    unit: '/ năm',
-                    originalPrice: Fmt.currency(rc.yearlyOriginalPrice),
-                    badgeAsset: 'assets/images/iap_12month.png',
-                    employeeLimitLabel: 'Không giới hạn nhân viên',
-                    hasBackup: true,
-                    hasPrioritySupport: true,
-                  ),
+                  if (_kShowPaidPlans) ...[
+                    const SizedBox(height: 12),
+                    _PlanCard(
+                      selected: _selected == _Plan.monthly,
+                      onTap: () => setState(() => _selected = _Plan.monthly),
+                      title: 'Gói Tháng',
+                      price: Fmt.currency(rc.monthlyPrice),
+                      unit: '/ tháng',
+                      badgeAsset: 'assets/images/iap_1month.png',
+                      employeeLimitLabel: '50 nhân viên',
+                      hasBackup: true,
+                      hasPrioritySupport: true,
+                    ),
+                    const SizedBox(height: 12),
+                    _PlanCard(
+                      selected: _selected == _Plan.yearly,
+                      onTap: () => setState(() => _selected = _Plan.yearly),
+                      title: 'Gói Năm',
+                      price: Fmt.currency(rc.yearlyFinalPrice),
+                      unit: '/ năm',
+                      originalPrice: Fmt.currency(rc.yearlyOriginalPrice),
+                      badgeAsset: 'assets/images/iap_12month.png',
+                      employeeLimitLabel: 'Không giới hạn nhân viên',
+                      hasBackup: true,
+                      hasPrioritySupport: true,
+                    ),
+                  ],
                   const SizedBox(height: 16),
                   const _SecurePaymentCard(),
                 ],

@@ -23,6 +23,8 @@ class _EmployeeFormScreenState extends State<EmployeeFormScreen> {
   late final TextEditingController _name;
   late final TextEditingController _salary;
   late final TextEditingController _otRate;
+  late final TextEditingController _otRateWeekend;
+  late final TextEditingController _otRateHoliday;
   late final TextEditingController _phone;
 
   bool _active = true;
@@ -40,6 +42,12 @@ class _EmployeeFormScreenState extends State<EmployeeFormScreen> {
     );
     _otRate = TextEditingController(
       text: e == null ? '' : Fmt.money(e.otRate),
+    );
+    _otRateWeekend = TextEditingController(
+      text: e == null || e.otRateWeekend <= 0 ? '' : Fmt.money(e.otRateWeekend),
+    );
+    _otRateHoliday = TextEditingController(
+      text: e == null || e.otRateHoliday <= 0 ? '' : Fmt.money(e.otRateHoliday),
     );
     _phone = TextEditingController(text: e?.phone ?? '');
     _active = e?.active ?? true;
@@ -67,6 +75,8 @@ class _EmployeeFormScreenState extends State<EmployeeFormScreen> {
     _name.dispose();
     _salary.dispose();
     _otRate.dispose();
+    _otRateWeekend.dispose();
+    _otRateHoliday.dispose();
     _phone.dispose();
     super.dispose();
   }
@@ -82,6 +92,8 @@ class _EmployeeFormScreenState extends State<EmployeeFormScreen> {
         name: _name.text.trim(),
         dailySalary: parseMoney(_salary.text).toDouble(),
         otRate: parseMoney(_otRate.text).toDouble(),
+        otRateWeekend: parseMoney(_otRateWeekend.text).toDouble(),
+        otRateHoliday: parseMoney(_otRateHoliday.text).toDouble(),
         phone: _phone.text.trim(),
         active: _active,
       );
@@ -175,6 +187,38 @@ class _EmployeeFormScreenState extends State<EmployeeFormScreen> {
                 suffixText: 'đ',
                 helperText: 'Để trống hoặc 0 nếu không trả tiền tăng ca riêng',
                 helperMaxLines: 2,
+              ),
+            ),
+            const SizedBox(height: 16),
+
+            _label('Đơn giá tăng ca Thứ 7, CN (VNĐ/giờ)'),
+            TextFormField(
+              controller: _otRateWeekend,
+              keyboardType: TextInputType.number,
+              textInputAction: TextInputAction.next,
+              inputFormatters: [ThousandsFormatter()],
+              decoration: const InputDecoration(
+                hintText: '75.000',
+                suffixText: 'đ',
+                helperText: 'Để trống hoặc 0 nếu dùng chung đơn giá thường',
+                helperMaxLines: 2,
+              ),
+            ),
+            const SizedBox(height: 16),
+
+            _label('Đơn giá tăng ca ngày lễ (VNĐ/giờ)'),
+            TextFormField(
+              controller: _otRateHoliday,
+              keyboardType: TextInputType.number,
+              textInputAction: TextInputAction.next,
+              inputFormatters: [ThousandsFormatter()],
+              decoration: const InputDecoration(
+                hintText: '100.000',
+                suffixText: 'đ',
+                helperText:
+                    'Để trống hoặc 0 nếu dùng chung đơn giá thường. '
+                    'Danh sách ngày lễ khai ở Cài đặt → Thiết lập lương & tăng ca.',
+                helperMaxLines: 3,
               ),
             ),
             const SizedBox(height: 16),

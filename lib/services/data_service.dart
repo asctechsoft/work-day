@@ -351,10 +351,16 @@ class DataService {
 
   /// Tổng hợp công - OT - lương theo từng nhân viên.
   /// Lương luôn được tính lại từ dữ liệu công nên không cần "chốt bảng lương".
+  ///
+  /// [holidayDates] (`AppSettings.holidayDates`) quyết định phút OT của ngày
+  /// nào được trả theo đơn giá ngày lễ thay vì đơn giá thường/cuối tuần, và
+  /// công của ngày nào được nhân [holidayPayMultiplier].
   static List<MonthlySummary> summarize(
     List<Employee> employees,
-    List<AttendanceRecord> records,
-  ) {
+    List<AttendanceRecord> records, {
+    Set<String> holidayDates = const {},
+    double holidayPayMultiplier = 1,
+  }) {
     final byEmployee = <String, List<AttendanceRecord>>{};
     for (final r in records) {
       (byEmployee[r.employeeId] ??= []).add(r);
@@ -362,18 +368,29 @@ class DataService {
     return employees.map((e) {
       final rs = byEmployee[e.id] ?? const <AttendanceRecord>[];
       var units = 0.0;
+      var unitsHoliday = 0.0;
       var present = 0;
       var absent = 0;
       var half = 0;
       var custom = 0;
-      var ot = 0;
+      var otNormal = 0;
+      var otWeekend = 0;
+      var otHoliday = 0;
       for (final r in rs) {
         units += r.workUnits;
+        if (holidayDates.contains(r.workDate)) unitsHoliday += r.workUnits;
         if (r.status == AttendanceStatus.present) present++;
         if (r.status == AttendanceStatus.absent) absent++;
         if (r.status == AttendanceStatus.half) half++;
         if (r.status == AttendanceStatus.custom) custom++;
-        ot += r.overtimeMinutes;
+        switch (r.otDayKind(holidayDates)) {
+          case OtDayKind.normal:
+            otNormal += r.overtimeMinutes;
+          case OtDayKind.weekend:
+            otWeekend += r.overtimeMinutes;
+          case OtDayKind.holiday:
+            otHoliday += r.overtimeMinutes;
+        }
       }
       return MonthlySummary(
         employeeId: e.id,
@@ -382,9 +399,15 @@ class DataService {
         absentDays: absent,
         halfDays: half,
         customDays: custom,
-        overtimeMinutes: ot,
+        overtimeMinutesNormal: otNormal,
+        overtimeMinutesWeekend: otWeekend,
+        overtimeMinutesHoliday: otHoliday,
         dailySalary: e.dailySalary,
         otRate: e.otRate,
+        otRateWeekend: e.otRateWeekend,
+        otRateHoliday: e.otRateHoliday,
+        workUnitsHoliday: unitsHoliday,
+        holidayPayMultiplier: holidayPayMultiplier,
       );
     }).toList();
   }
@@ -395,10 +418,17 @@ class DataService {
   /// dồn. Tự gộp cả người đã nghỉ mà còn công trong nhóm đó (luật §0.7).
   static double totalPayrollOf(
     List<Employee> all,
-    List<AttendanceRecord> records,
-  ) {
+    List<AttendanceRecord> records, {
+    Set<String> holidayDates = const {},
+    double holidayPayMultiplier = 1,
+  }) {
     var total = 0.0;
-    for (final s in summarize(employeesForExport(all, records), records)) {
+    for (final s in summarize(
+      employeesForExport(all, records),
+      records,
+      holidayDates: holidayDates,
+      holidayPayMultiplier: holidayPayMultiplier,
+    )) {
       total += s.totalPay;
     }
     return total;

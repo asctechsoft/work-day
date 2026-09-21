@@ -17,17 +17,25 @@ const kOnPlayStore = false;
 const _playStoreUrl =
     'https://play.google.com/store/apps/details?id=com.campany.tickgo';
 
-/// Hiện dialog "đánh giá app" nổi trên màn đang xem - không điều hướng sang
-/// màn mới, vì đây là một lời mời ngắn chứ không phải một biểu mẫu cần trang
-/// riêng.
+/// Hiện bảng "đánh giá app" trượt lên từ đáy màn - không điều hướng sang màn
+/// mới, vì đây là một lời mời ngắn chứ không phải một biểu mẫu cần trang
+/// riêng. Đổi từ dialog nổi giữa màn sang bottom sheet theo yêu cầu người
+/// dùng 21/09/2026.
 ///
-/// Bấm **"Đánh giá ngay"**: dialog đóng lại **rồi mới** mở Play Store, dùng
-/// đúng `context` của màn gọi hàm này (màn Cài đặt) - context của dialog vừa
-/// đóng đã mất, không dùng lại được để launch URL hay hiện toast.
+/// Bấm **"Đánh giá ngay"**: sheet đóng lại **rồi mới** mở Play Store, dùng
+/// đúng `context` của màn gọi hàm này (màn Cài đặt, hoặc sau dialog chào
+/// mừng) - context của sheet vừa đóng đã mất, không dùng lại được để launch
+/// URL hay hiện toast.
 Future<void> showReviewDialog(BuildContext context) async {
-  final rated = await showDialog<bool>(
+  final rated = await showModalBottomSheet<bool>(
     context: context,
-    builder: (_) => const _ReviewDialog(),
+    isScrollControlled: true,
+    showDragHandle: true,
+    backgroundColor: AppColors.surface,
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+    ),
+    builder: (_) => const _ReviewSheet(),
   );
   if (rated != true || !context.mounted) return;
 
@@ -44,14 +52,14 @@ Future<void> showReviewDialog(BuildContext context) async {
   }
 }
 
-class _ReviewDialog extends StatefulWidget {
-  const _ReviewDialog();
+class _ReviewSheet extends StatefulWidget {
+  const _ReviewSheet();
 
   @override
-  State<_ReviewDialog> createState() => _ReviewDialogState();
+  State<_ReviewSheet> createState() => _ReviewSheetState();
 }
 
-class _ReviewDialogState extends State<_ReviewDialog> {
+class _ReviewSheetState extends State<_ReviewSheet> {
   // Mở dialog là 5 sao đã sáng sẵn (mời đánh giá cao) - `_litStars` chỉ để
   // chạy hiệu ứng sáng lần lượt, không đổi giá trị đánh giá được gửi đi.
   int _stars = 5;
@@ -101,90 +109,76 @@ class _ReviewDialogState extends State<_ReviewDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return Dialog(
-      backgroundColor: AppColors.surface,
-      surfaceTintColor: Colors.transparent,
-      insetPadding: const EdgeInsets.symmetric(horizontal: 22),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-      clipBehavior: Clip.antiAlias,
-      child: Stack(
-        children: [
-          ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 420),
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.fromLTRB(24, 20, 24, 22),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Image.asset(
-                    'assets/images/img_rate.png',
-                    height: 140,
-                    fit: BoxFit.contain,
-                  ),
-                  const SizedBox(height: 8),
-                  Text.rich(
-                    TextSpan(
-                      style: const TextStyle(
-                        fontSize: 19,
-                        fontWeight: FontWeight.w800,
-                        color: AppColors.textDark,
+    // `SafeArea` bắt buộc cho mọi `showModalBottomSheet` (§5.2.3 CLAUDE.md) -
+    // bảng chọn của Material không tự tránh thanh điều hướng Android.
+    return SafeArea(
+      top: false,
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 420),
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(24, 4, 24, 22),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Image.asset(
+                  'assets/images/img_rate.png',
+                  height: 140,
+                  fit: BoxFit.contain,
+                ),
+                const SizedBox(height: 8),
+                Text.rich(
+                  TextSpan(
+                    style: const TextStyle(
+                      fontSize: 19,
+                      fontWeight: FontWeight.w800,
+                      color: AppColors.textDark,
+                    ),
+                    children: [
+                      const TextSpan(text: 'Bạn thích '),
+                      const TextSpan(
+                        text: 'ứng dụng này',
+                        style: TextStyle(color: AppColors.primaryDark),
                       ),
-                      children: [
-                        const TextSpan(text: 'Bạn thích '),
-                        const TextSpan(
-                          text: 'ứng dụng này',
-                          style: TextStyle(color: AppColors.primaryDark),
-                        ),
-                        const TextSpan(text: '?'),
-                      ],
-                    ),
-                    textAlign: TextAlign.center,
+                      const TextSpan(text: '?'),
+                    ],
                   ),
-                  const SizedBox(height: 8),
-                  const Text(
-                    'Nếu thấy hữu ích, hãy dành 1 phút để đánh giá 5 sao '
-                    'giúp chúng tôi nhé!',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontSize: 13.5,
-                      color: AppColors.textMuted,
-                      height: 1.45,
-                    ),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  'Nếu thấy hữu ích, hãy dành 1 phút để đánh giá 5 sao '
+                  'giúp chúng tôi nhé!',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 13.5,
+                    color: AppColors.textMuted,
+                    height: 1.45,
                   ),
-                  const SizedBox(height: 18),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [for (var i = 1; i <= 5; i++) _starButton(i)],
-                  ),
-                  const SizedBox(height: 22),
-                  GradientButton(
-                    label: 'Đánh giá ngay',
-                    icon: Icons.star_rounded,
-                    onPressed: _rateNow,
-                  ),
-                  const SizedBox(height: 10),
-                  _LaterButton(onTap: _later),
-                  const SizedBox(height: 16),
-                  const Text(
-                    'Cảm ơn bạn đã đồng hành cùng chúng tôi! 💚',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(fontSize: 12, color: AppColors.textMuted),
-                  ),
-                ],
-              ),
+                ),
+                const SizedBox(height: 18),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [for (var i = 1; i <= 5; i++) _starButton(i)],
+                ),
+                const SizedBox(height: 22),
+                GradientButton(
+                  label: 'Đánh giá ngay',
+                  icon: Icons.star_rounded,
+                  onPressed: _rateNow,
+                ),
+                const SizedBox(height: 10),
+                _LaterButton(onTap: _later),
+                const SizedBox(height: 16),
+                const Text(
+                  'Cảm ơn bạn đã đồng hành cùng chúng tôi! 💚',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 12, color: AppColors.textMuted),
+                ),
+              ],
             ),
           ),
-          Positioned(
-            top: 6,
-            right: 6,
-            child: IconButton(
-              tooltip: 'Đóng',
-              onPressed: _later,
-              icon: const Icon(Icons.close_rounded),
-              color: AppColors.textMuted,
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }

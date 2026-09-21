@@ -1,4 +1,6 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/theme.dart';
 import '../../services/auth_service.dart';
@@ -12,6 +14,11 @@ import 'general_settings_screen.dart';
 import 'iap_screen.dart';
 import 'review_screen.dart';
 import 'salary_settings_screen.dart';
+
+/// Đường dẫn trang chính sách bảo mật - **để trống**, gắn link thật sau.
+/// Bấm vào mà còn trống thì chỉ hiện toast, không mở gì cả (tránh
+/// `Uri.parse('')` ném lỗi).
+const _privacyPolicyUrl = '';
 
 /// Tab Cài đặt: gom toàn bộ phần quản lý dữ liệu để navigation chỉ có 3 tab.
 class SettingsTab extends StatefulWidget {
@@ -47,6 +54,11 @@ class _SettingsTabState extends State<SettingsTab> {
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 28),
         children: [
+          // Chia theo danh mục vì mỗi bản thêm vài mục là danh sách một cột
+          // dài dằng dặc, khó dò - người dùng yêu cầu 21/09/2026. Ba nhóm:
+          // Tài khoản, Cơ sở & lương, Ứng dụng. "Đăng xuất" đứng riêng cuối
+          // cùng, không cần tiêu đề vì đã là nút đỏ nổi bật sẵn.
+          const _GroupTitle('Tài khoản'),
           // Chỉ tài khoản tổng thấy dòng này. Thấy được cũng không đọc được
           // gì thêm: rules chặn theo danh sách uid, không theo trường `role`.
           if (isSuper)
@@ -64,6 +76,19 @@ class _SettingsTabState extends State<SettingsTab> {
             subtitle: 'Đổi tên hiển thị, thông tin đăng nhập',
             onTap: () => _open(context, const AccountScreen()),
           ),
+          _SettingItem(
+            icon: Icons.sync_rounded,
+            color: AppColors.info,
+            title: 'Đồng bộ dữ liệu',
+            subtitle: 'Chấm công offline đã lưu tự đồng bộ, bấm để chắc chắn',
+            // Không phải màn hình, chỉ ép kết nối lại rồi báo kết quả - xem
+            // _syncNow(). App đã tự đồng bộ realtime + offline persistence
+            // sẵn (§3 CLAUDE.md), nút này chỉ để người dùng yên tâm sau khi
+            // chấm công lúc mất mạng.
+            onTap: () => _syncNow(context),
+          ),
+
+          const _GroupTitle('Cơ sở & lương'),
           _SettingItem(
             icon: Icons.groups_outlined,
             color: AppColors.present,
@@ -85,6 +110,8 @@ class _SettingsTabState extends State<SettingsTab> {
             subtitle: 'Tiền tệ, mốc tăng ca nhanh, giờ làm mỗi ngày',
             onTap: () => _open(context, const GeneralSettingsScreen()),
           ),
+
+          const _GroupTitle('Ứng dụng'),
           _SettingItem(
             icon: Icons.star_outline_rounded,
             color: AppColors.overtime,
@@ -100,6 +127,13 @@ class _SettingsTabState extends State<SettingsTab> {
             title: 'Giới thiệu ứng dụng',
             subtitle: 'Phiên bản 1.0.0',
             onTap: () => _open(context, const AboutScreen()),
+          ),
+          _SettingItem(
+            icon: Icons.privacy_tip_outlined,
+            color: AppColors.custom,
+            title: 'Chính sách bảo mật',
+            subtitle: 'Xem trên trang web',
+            onTap: () => _openPrivacyPolicy(context),
           ),
           const SizedBox(height: 24),
           OutlinedButton.icon(
@@ -133,6 +167,35 @@ class _SettingsTabState extends State<SettingsTab> {
 
   void _open(BuildContext context, Widget screen) {
     pushScreen(context, screen);
+  }
+
+  /// Ép Firestore kết nối lại rồi báo kết quả - không phải cơ chế đồng bộ
+  /// thật (đã tự chạy realtime + offline persistence, xem §3 CLAUDE.md), chỉ
+  /// để người dùng không rành công nghệ yên tâm dữ liệu chấm công offline đã
+  /// lên mạng.
+  Future<void> _syncNow(BuildContext context) async {
+    try {
+      await FirebaseFirestore.instance.enableNetwork();
+      if (context.mounted) showToast(context, 'Đã đồng bộ dữ liệu');
+    } catch (e) {
+      if (context.mounted) {
+        showToast(context, 'Không đồng bộ được: $e', error: true);
+      }
+    }
+  }
+
+  Future<void> _openPrivacyPolicy(BuildContext context) async {
+    if (_privacyPolicyUrl.isEmpty) {
+      showToast(context, 'Chưa có đường dẫn chính sách bảo mật', error: true);
+      return;
+    }
+    final ok = await launchUrl(
+      Uri.parse(_privacyPolicyUrl),
+      mode: LaunchMode.externalApplication,
+    );
+    if (!ok && context.mounted) {
+      showToast(context, 'Không mở được trang chính sách bảo mật', error: true);
+    }
   }
 
   // Đẩy Danh sách nhân viên trước, rồi đẩy màn Nâng cấp gói chồng lên trên -
@@ -256,6 +319,30 @@ class _SettingItem extends StatelessWidget {
               ],
             ),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Tiêu đề một nhóm mục trong danh sách Cài đặt - chữ nhỏ, viết hoa, màu
+/// nhạt hơn `SectionTitle` (dùng trong `AppCard`) để không lẫn với tiêu đề
+/// của từng mục ngay dưới nó.
+class _GroupTitle extends StatelessWidget {
+  final String text;
+  const _GroupTitle(this.text);
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(4, 12, 4, 8),
+      child: Text(
+        text.toUpperCase(),
+        style: const TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.w700,
+          color: AppColors.textMuted,
+          letterSpacing: 0.4,
         ),
       ),
     );

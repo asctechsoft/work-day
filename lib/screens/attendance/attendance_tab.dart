@@ -11,6 +11,7 @@ import '../../models/employee.dart';
 import '../../services/data_service.dart';
 import '../../widgets/common.dart';
 import '../home_shell.dart';
+import '../settings/iap_screen.dart';
 import 'attendance_actions.dart';
 import 'attendance_row.dart';
 import 'attendance_search_screen.dart';
@@ -184,6 +185,14 @@ class _AttendanceTabState extends State<AttendanceTab> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
+        leading: IconButton(
+          tooltip: 'Nâng cấp gói',
+          onPressed: () => pushScreen(context, const IapScreen()),
+          icon: const Icon(
+            Icons.workspace_premium_rounded,
+            color: AppColors.overtime,
+          ),
+        ),
         title: const Text('Chấm công'),
         actions: [
           IconButton(

@@ -170,6 +170,31 @@ class AttendanceRecord {
   }
 
   static String _p2(int v) => v.toString().padLeft(2, '0');
+
+  /// Phân loại ngày để chọn đơn giá OT: ngày lễ được ưu tiên hơn cuối tuần
+  /// (một ngày lễ rơi đúng Thứ 7/CN vẫn tính là ngày lễ).
+  OtDayKind otDayKind(Set<String> holidayDates) {
+    if (holidayDates.contains(workDate)) return OtDayKind.holiday;
+    final weekday = DateTime.parse(workDate).weekday;
+    if (weekday == DateTime.saturday || weekday == DateTime.sunday) {
+      return OtDayKind.weekend;
+    }
+    return OtDayKind.normal;
+  }
+}
+
+/// Loại ngày dùng để chọn đơn giá OT áp dụng cho phút tăng ca của ngày đó.
+enum OtDayKind {
+  /// Ngày thường - dùng `Employee.otRate`.
+  normal,
+
+  /// Thứ 7 / Chủ nhật - dùng `Employee.otRateWeekend` nếu > 0, không thì
+  /// dùng `otRate` (xem [MonthlySummary.otPay]).
+  weekend,
+
+  /// Ngày lễ khai trong `AppSettings.holidayDates` - dùng
+  /// `Employee.otRateHoliday` nếu > 0, không thì dùng `otRate`.
+  holiday,
 }
 
 /// Tổng hợp công - OT - lương của một nhân viên trong một tháng.
@@ -187,17 +212,54 @@ class MonthlySummary {
   /// Số ngày đi làm đủ (Đi làm = 1 công).
   final int presentDays;
 
-  final int overtimeMinutes;
+  /// Số phút OT của ngày thường - trả theo [otRate].
+  final int overtimeMinutesNormal;
+
+  /// Số phút OT rơi vào Thứ 7 / Chủ nhật - trả theo [otRateWeekend] nếu > 0,
+  /// không thì trả theo [otRate] như ngày thường.
+  final int overtimeMinutesWeekend;
+
+  /// Số phút OT rơi vào ngày lễ (`AppSettings.holidayDates`) - trả theo
+  /// [otRateHoliday] nếu > 0, không thì trả theo [otRate].
+  final int overtimeMinutesHoliday;
+
   final double dailySalary;
   final double otRate;
+
+  /// Đơn giá OT/giờ riêng cho cuối tuần. 0 = dùng chung [otRate] - đây là
+  /// ngoại lệ bổ sung 19/09/2026 cho nghiệp vụ OT cuối tuần/ngày lễ trả cao
+  /// hơn ngày thường, cùng dạng ngoại lệ đã mở ở §0.4/§0.2 CLAUDE.md.
+  final double otRateWeekend;
+
+  /// Đơn giá OT/giờ riêng cho ngày lễ. 0 = dùng chung [otRate].
+  final double otRateHoliday;
+
+  /// Số công rơi vào ngày lễ (`AppSettings.holidayDates`) - phần này của
+  /// [basePay] được nhân thêm [holidayPayMultiplier], phần công còn lại tính
+  /// bình thường.
+  final double workUnitsHoliday;
+
+  /// Hệ số nhân lương công của ngày lễ - ví dụ 2 = lương công ngày lễ gấp
+  /// đôi ngày thường. Mặc định 1 = không nhân, tính như ngày thường. Đây là
+  /// ngoại lệ bổ sung 21/09/2026, người dùng yêu cầu sau khi hỏi cách tính
+  /// tiền ngày lễ - **khác** đơn giá OT ngày lễ ([otRateHoliday]): hệ số này
+  /// nhân vào lương công (`basePay`), còn [otRateHoliday] chỉ áp cho phần
+  /// tăng ca, hai thứ cộng lại mới ra tổng lương của một ngày lễ có tăng ca.
+  final double holidayPayMultiplier;
 
   const MonthlySummary({
     required this.employeeId,
     required this.totalWorkUnits,
     required this.absentDays,
-    required this.overtimeMinutes,
     required this.dailySalary,
     required this.otRate,
+    this.overtimeMinutesNormal = 0,
+    this.overtimeMinutesWeekend = 0,
+    this.overtimeMinutesHoliday = 0,
+    this.otRateWeekend = 0,
+    this.otRateHoliday = 0,
+    this.workUnitsHoliday = 0,
+    this.holidayPayMultiplier = 1,
     this.halfDays = 0,
     this.customDays = 0,
     this.presentDays = 0,
@@ -206,11 +268,29 @@ class MonthlySummary {
   /// Số ngày đã chấm (đủ công + nửa công + tuỳ chỉnh + nghỉ).
   int get markedDays => presentDays + halfDays + customDays + absentDays;
 
-  /// Lương công = Tổng công × Lương/ngày
-  double get basePay => totalWorkUnits * dailySalary;
+  /// Tổng số phút OT của cả kỳ, bất kể ngày thường/cuối tuần/lễ.
+  int get overtimeMinutes =>
+      overtimeMinutesNormal + overtimeMinutesWeekend + overtimeMinutesHoliday;
 
-  /// Tiền OT = Tổng giờ OT × Đơn giá OT/giờ
-  double get otPay => (overtimeMinutes / 60.0) * otRate;
+  /// Đơn giá thật sự áp dụng cho OT cuối tuần: về đơn giá thường nếu cơ sở
+  /// không đặt riêng - đọc trực tiếp ở đây, đừng suy ra 0 = "không trả".
+  double get effectiveOtRateWeekend => otRateWeekend > 0 ? otRateWeekend : otRate;
+
+  /// Đơn giá thật sự áp dụng cho OT ngày lễ, cùng quy tắc như trên.
+  double get effectiveOtRateHoliday => otRateHoliday > 0 ? otRateHoliday : otRate;
+
+  /// Lương công = Tổng công × Lương/ngày, riêng phần công rơi vào ngày lễ
+  /// được nhân thêm [holidayPayMultiplier].
+  double get basePay =>
+      (totalWorkUnits - workUnitsHoliday) * dailySalary +
+      workUnitsHoliday * dailySalary * holidayPayMultiplier;
+
+  /// Tiền OT = cộng riêng từng loại ngày vì mỗi loại có thể có đơn giá khác
+  /// nhau (§0.5 CLAUDE.md: OT lưu riêng với công, không đổi cách này).
+  double get otPay =>
+      (overtimeMinutesNormal / 60.0) * otRate +
+      (overtimeMinutesWeekend / 60.0) * effectiveOtRateWeekend +
+      (overtimeMinutesHoliday / 60.0) * effectiveOtRateHoliday;
 
   /// Tổng lương = Lương công + Tiền OT
   double get totalPay => basePay + otPay;

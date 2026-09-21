@@ -26,6 +26,11 @@ class _SalarySettingsScreenState extends State<SalarySettingsScreen> {
   bool _loaded = false;
   bool _busy = false;
 
+  /// Sửa riêng ngoài `_settings`: thêm/xoá ngày lễ lưu ngay, không chờ nút
+  /// Lưu chung của khối "Mặc định cho nhân viên mới" phía trên.
+  List<String> _holidayDates = const [];
+  bool _holidayBusy = false;
+
   @override
   void initState() {
     super.initState();
@@ -40,6 +45,7 @@ class _SalarySettingsScreenState extends State<SalarySettingsScreen> {
         _settings = s;
         _salary.text = Fmt.money(s.defaultDailySalary);
         _otRate.text = Fmt.money(s.defaultOtRate);
+        _holidayDates = [...s.holidayDates]..sort();
         _loaded = true;
       });
     } catch (_) {
@@ -74,6 +80,65 @@ class _SalarySettingsScreenState extends State<SalarySettingsScreen> {
       if (mounted) showToast(context, 'Không lưu được: $e', error: true);
     } finally {
       if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  /// Ngày lễ lưu ngay khi thêm/xoá, không có nút Lưu riêng - đây là một danh
+  /// sách chọn/bỏ đơn giản, không phải form nhiều ô nhập như phần trên.
+  Future<void> _saveHolidayDates(List<String> next) async {
+    setState(() => _holidayBusy = true);
+    try {
+      await _data.saveSettings(_settings.copyWith(holidayDates: next));
+      if (!mounted) return;
+      setState(() {
+        _settings = _settings.copyWith(holidayDates: next);
+        _holidayDates = next;
+      });
+    } catch (e) {
+      if (mounted) showToast(context, 'Không lưu được: $e', error: true);
+    } finally {
+      if (mounted) setState(() => _holidayBusy = false);
+    }
+  }
+
+  Future<void> _addHoliday() async {
+    final now = DateTime.now();
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: now,
+      firstDate: DateTime(now.year - 1),
+      lastDate: DateTime(now.year + 3),
+      helpText: 'Chọn ngày lễ',
+    );
+    if (picked == null) return;
+    final key = Fmt.dateKey(picked);
+    if (_holidayDates.contains(key)) return;
+    await _saveHolidayDates([..._holidayDates, key]..sort());
+  }
+
+  Future<void> _removeHoliday(String key) async {
+    await _saveHolidayDates(
+      _holidayDates.where((d) => d != key).toList(),
+    );
+  }
+
+  /// Hệ số nhân lương công của ngày lễ - lưu ngay khi chọn, cùng kiểu với
+  /// danh sách ngày lễ ngay trên nó.
+  Future<void> _saveHolidayMultiplier(double value) async {
+    if (_settings.holidayPayMultiplier == value) return;
+    setState(() => _holidayBusy = true);
+    try {
+      await _data.saveSettings(
+        _settings.copyWith(holidayPayMultiplier: value),
+      );
+      if (!mounted) return;
+      setState(() {
+        _settings = _settings.copyWith(holidayPayMultiplier: value);
+      });
+    } catch (e) {
+      if (mounted) showToast(context, 'Không lưu được: $e', error: true);
+    } finally {
+      if (mounted) setState(() => _holidayBusy = false);
     }
   }
 
@@ -167,6 +232,121 @@ class _SalarySettingsScreenState extends State<SalarySettingsScreen> {
                 ),
                 const SizedBox(height: 14),
 
+                AppCard(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          const Expanded(
+                            child: SectionTitle('Ngày lễ'),
+                          ),
+                          if (_holidayBusy)
+                            const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: AppColors.primary,
+                              ),
+                            )
+                          else
+                            TextButton.icon(
+                              onPressed: _addHoliday,
+                              icon: const Icon(Icons.add_rounded, size: 18),
+                              label: const Text('Thêm ngày'),
+                              style: TextButton.styleFrom(
+                                padding: EdgeInsets.zero,
+                                minimumSize: const Size(0, 32),
+                              ),
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      const Text(
+                        'Nhân viên đi làm vào đúng ngày lễ được tính OT theo '
+                        'đơn giá tăng ca ngày lễ riêng (đặt ở hồ sơ từng '
+                        'người), thay vì đơn giá thường.',
+                        style: TextStyle(
+                          fontSize: 12.5,
+                          color: AppColors.textMuted,
+                          height: 1.4,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      _label('Hệ số lương công ngày lễ'),
+                      Row(
+                        children: [
+                          for (final m in const [1.0, 2.0, 3.0]) ...[
+                            _MultiplierChip(
+                              value: m,
+                              selected: _settings.holidayPayMultiplier == m,
+                              enabled: !_holidayBusy,
+                              onTap: () => _saveHolidayMultiplier(m),
+                            ),
+                            if (m != 3.0) const SizedBox(width: 10),
+                          ],
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      const Text(
+                        'Áp dụng cho lương công của đúng ngày lễ (ví dụ x2 = '
+                        'gấp đôi lương/ngày). Không ảnh hưởng ngày thường '
+                        'hay cuối tuần, và không tính vào tiền tăng ca.',
+                        style: TextStyle(
+                          fontSize: 12.5,
+                          color: AppColors.textMuted,
+                          height: 1.4,
+                        ),
+                      ),
+                      if (_holidayDates.isEmpty)
+                        const Padding(
+                          padding: EdgeInsets.only(top: 12),
+                          child: Text(
+                            'Chưa có ngày lễ nào.',
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: AppColors.textMuted,
+                            ),
+                          ),
+                        )
+                      else
+                        for (final key in _holidayDates)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 10),
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    Fmt.fullDate(Fmt.parseDateKey(key)),
+                                    style: const TextStyle(
+                                      fontSize: 13.5,
+                                      fontWeight: FontWeight.w600,
+                                      color: AppColors.textDark,
+                                    ),
+                                  ),
+                                ),
+                                IconButton(
+                                  onPressed: _holidayBusy
+                                      ? null
+                                      : () => _removeHoliday(key),
+                                  icon: const Icon(
+                                    Icons.close_rounded,
+                                    size: 19,
+                                    color: AppColors.textMuted,
+                                  ),
+                                  visualDensity: VisualDensity.compact,
+                                  padding: EdgeInsets.zero,
+                                  constraints: const BoxConstraints(),
+                                ),
+                              ],
+                            ),
+                          ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 14),
+
                 StreamBuilder<List<Employee>>(
                   stream: _data.watchActiveEmployees(),
                   builder: (context, snap) {
@@ -229,6 +409,22 @@ class _SalarySettingsScreenState extends State<SalarySettingsScreen> {
                                             color: AppColors.textMuted,
                                           ),
                                         ),
+                                        // Chỉ hiện khi có đặt riêng - đa số
+                                        // nhân viên dùng chung một đơn giá.
+                                        if (e.otRateWeekend > 0 ||
+                                            e.otRateHoliday > 0)
+                                          Text(
+                                            [
+                                              if (e.otRateWeekend > 0)
+                                                'T7-CN ${Fmt.currency(e.otRateWeekend)}/h',
+                                              if (e.otRateHoliday > 0)
+                                                'Lễ ${Fmt.currency(e.otRateHoliday)}/h',
+                                            ].join(' · '),
+                                            style: const TextStyle(
+                                              fontSize: 11.5,
+                                              color: AppColors.overtime,
+                                            ),
+                                          ),
                                       ],
                                     ),
                                     const SizedBox(width: 4),
@@ -294,4 +490,46 @@ class _SalarySettingsScreenState extends State<SalarySettingsScreen> {
       ],
     ),
   );
+}
+
+/// Một lựa chọn hệ số ("x1", "x2", "x3") - kiểu chip chọn/bỏ giống các
+/// bảng chọn khác trong app, không dùng ô nhập % tự do.
+class _MultiplierChip extends StatelessWidget {
+  final double value;
+  final bool selected;
+  final bool enabled;
+  final VoidCallback onTap;
+
+  const _MultiplierChip({
+    required this.value,
+    required this.selected,
+    required this.enabled,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: Material(
+        color: selected ? AppColors.primarySoft : AppColors.background,
+        borderRadius: BorderRadius.circular(10),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(10),
+          onTap: enabled ? onTap : null,
+          child: Container(
+            height: 44,
+            alignment: Alignment.center,
+            child: Text(
+              value == 1 ? 'x1 (thường)' : 'x${Fmt.workUnits(value)}',
+              style: TextStyle(
+                fontSize: 13.5,
+                fontWeight: FontWeight.w700,
+                color: selected ? AppColors.primaryDark : AppColors.textBody,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }

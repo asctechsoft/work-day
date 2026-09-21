@@ -299,6 +299,157 @@ void main() {
     });
   });
 
+  group('OT cuối tuần / ngày lễ', () {
+    AttendanceRecord rec(String date, int ot) => AttendanceRecord(
+          employeeId: 'lan',
+          workDate: date,
+          month: '2026-09',
+          status: AttendanceStatus.present,
+          workUnits: 1,
+          overtimeMinutes: ot,
+        );
+
+    test(
+        'không đặt đơn giá riêng thì OT cuối tuần/lễ vẫn tính theo đơn giá '
+        'thường (không đổi hành vi cũ)', () {
+      const lan = Employee(id: 'lan', name: 'Cô Lan', dailySalary: 300000, otRate: 50000);
+      final records = [
+        rec('2026-09-05', 60), // Thứ 7
+        rec('2026-09-06', 60), // Chủ nhật
+        rec('2026-09-07', 60), // Thứ 2, ngày thường
+      ];
+
+      final s = DataService.summarize(
+        [lan],
+        records,
+        holidayDates: const {'2026-09-02'},
+      ).single;
+
+      expect(s.overtimeMinutes, 180);
+      expect(s.otPay, 3 * 50000);
+    });
+
+    test('Thứ 7/CN dùng đúng đơn giá OT cuối tuần khi cơ sở đặt riêng', () {
+      const lan = Employee(
+        id: 'lan',
+        name: 'Cô Lan',
+        dailySalary: 300000,
+        otRate: 50000,
+        otRateWeekend: 75000,
+      );
+      final records = [
+        rec('2026-09-05', 60), // Thứ 7 - 1h OT
+        rec('2026-09-07', 60), // Thứ 2 - 1h OT, vẫn giá thường
+      ];
+
+      final s = DataService.summarize([lan], records).single;
+
+      expect(s.otPay, 75000 + 50000);
+    });
+
+    test('ngày lễ dùng đơn giá OT ngày lễ, kể cả khi lễ rơi vào cuối tuần', () {
+      const lan = Employee(
+        id: 'lan',
+        name: 'Cô Lan',
+        dailySalary: 300000,
+        otRate: 50000,
+        otRateWeekend: 75000,
+        otRateHoliday: 100000,
+      );
+      final records = [
+        rec('2026-09-02', 60), // Lễ, rơi vào Thứ 4
+        rec('2026-09-06', 60), // Chủ nhật, cũng là lễ trong test này
+      ];
+
+      final s = DataService.summarize(
+        [lan],
+        records,
+        holidayDates: const {'2026-09-02', '2026-09-06'},
+      ).single;
+
+      // Cả hai ngày đều tính theo giá lễ (100.000), không rơi về giá cuối
+      // tuần dù 06/09 là Chủ nhật - ngày lễ được ưu tiên hơn cuối tuần.
+      expect(s.otPay, 2 * 100000);
+    });
+
+    test('đơn giá cuối tuần/lễ để 0 thì OT của ngày đó dùng chung đơn giá '
+        'thường, không phải 0đ', () {
+      const lan = Employee(id: 'lan', name: 'Cô Lan', dailySalary: 300000, otRate: 50000);
+      final records = [rec('2026-09-05', 60)]; // Thứ 7
+
+      final s = DataService.summarize([lan], records).single;
+
+      expect(s.effectiveOtRateWeekend, 50000);
+      expect(s.otPay, 50000);
+    });
+  });
+
+  group('Hệ số lương công ngày lễ', () {
+    AttendanceRecord rec(String date, {int ot = 0}) => AttendanceRecord(
+          employeeId: 'lan',
+          workDate: date,
+          month: '2026-09',
+          status: AttendanceStatus.present,
+          workUnits: 1,
+          overtimeMinutes: ot,
+        );
+
+    test('không đặt hệ số (mặc định 1) thì lương công tính như cũ', () {
+      const lan = Employee(id: 'lan', name: 'Cô Lan', dailySalary: 300000);
+      final records = [rec('2026-09-01'), rec('2026-09-02')];
+
+      final s = DataService.summarize(
+        [lan],
+        records,
+        holidayDates: const {'2026-09-01'},
+      ).single;
+
+      expect(s.basePay, 2 * 300000);
+    });
+
+    test('công rơi vào ngày lễ được nhân hệ số, công ngày khác giữ nguyên', () {
+      const lan = Employee(id: 'lan', name: 'Cô Lan', dailySalary: 300000);
+      final records = [
+        rec('2026-09-01'), // lễ
+        rec('2026-09-02'), // ngày thường
+      ];
+
+      final s = DataService.summarize(
+        [lan],
+        records,
+        holidayDates: const {'2026-09-01'},
+        holidayPayMultiplier: 3,
+      ).single;
+
+      // 1 công lễ x3 + 1 công thường x1 = 4 công quy đổi.
+      expect(s.totalWorkUnits, 2);
+      expect(s.basePay, 300000 * 3 + 300000);
+    });
+
+    test('hệ số ngày lễ không đụng tới tiền OT - OT vẫn tính riêng theo '
+        'otRateHoliday', () {
+      const lan = Employee(
+        id: 'lan',
+        name: 'Cô Lan',
+        dailySalary: 300000,
+        otRate: 50000,
+        otRateHoliday: 100000,
+      );
+      final records = [rec('2026-09-01', ot: 60)];
+
+      final s = DataService.summarize(
+        [lan],
+        records,
+        holidayDates: const {'2026-09-01'},
+        holidayPayMultiplier: 2,
+      ).single;
+
+      expect(s.basePay, 300000 * 2);
+      expect(s.otPay, 100000);
+      expect(s.totalPay, 300000 * 2 + 100000);
+    });
+  });
+
   group('Quỹ lương theo quý / theo năm', () {
     const lan = Employee(
       id: 'lan',

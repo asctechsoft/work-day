@@ -55,10 +55,19 @@ class PayrollTrendChart extends StatefulWidget {
   /// Năm đang xem, lấy từ kỳ đang chọn ở tab Tổng quan.
   final int year;
 
+  /// `AppSettings.holidayDates` - để quỹ lương từng kỳ tính đúng đơn giá OT
+  /// ngày lễ, giống cách `DataService.summarize` dùng ở các màn khác.
+  final Set<String> holidayDates;
+
+  /// `AppSettings.holidayPayMultiplier` - hệ số nhân lương công ngày lễ.
+  final double holidayPayMultiplier;
+
   const PayrollTrendChart({
     super.key,
     required this.payPeriodStartDay,
     required this.year,
+    this.holidayDates = const {},
+    this.holidayPayMultiplier = 1,
   });
 
   @override
@@ -153,7 +162,12 @@ class _PayrollTrendChartState extends State<PayrollTrendChart> {
       final p = periods[i];
       // Người đã nghỉ nhưng có công trong kỳ vẫn phải tính vào quỹ lương.
       totals.add(
-        DataService.totalPayrollOf(all, byPeriod[i] ?? const []),
+        DataService.totalPayrollOf(
+          all,
+          byPeriod[i] ?? const [],
+          holidayDates: widget.holidayDates,
+          holidayPayMultiplier: widget.holidayPayMultiplier,
+        ),
       );
       ongoing.add(p.contains(today));
       future.add(p.start.isAfter(today));

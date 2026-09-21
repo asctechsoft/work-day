@@ -28,12 +28,18 @@ class ExportService {
   static const _colOt = 4;
 
   /// Dựng file và trả về đường dẫn đã lưu.
+  ///
+  /// [holidayDates] (`AppSettings.holidayDates`) quyết định ngày nào trong kỳ
+  /// được tính OT theo đơn giá ngày lễ (`Employee.otRateHoliday`) thay vì
+  /// đơn giá thường/cuối tuần - cùng cách chọn đơn giá như `DataService.summarize`.
   Future<String> exportPeriod({
     required PayPeriod period,
     required List<Employee> employees,
     required List<AttendanceRecord> records,
     required String orgName,
     required int workHoursPerDay,
+    Set<String> holidayDates = const {},
+    double holidayPayMultiplier = 1,
   }) async {
     final excel = Excel.createExcel();
     const sheetName = 'Bảng công';
@@ -93,7 +99,26 @@ class ExportService {
         _sectionStyle,
       );
       _putLabelMoney(sheet, row++, 'Lương/ngày', e.dailySalary);
-      _putLabelMoney(sheet, row++, 'Đơn giá OT/giờ', e.otRate);
+      _putLabelMoney(sheet, row++, 'Đơn giá OT/giờ (ngày thường)', e.otRate);
+      // Hai dòng đơn giá cuối tuần/lễ chỉ hiện khi cơ sở thật sự đặt riêng -
+      // đa số nhân viên dùng chung một đơn giá, thêm hai dòng luôn hiện là
+      // thừa (cùng nguyên tắc "chỉ vẽ khi khác biệt" ở §5.1 CLAUDE.md).
+      if (e.otRateWeekend > 0) {
+        _putLabelMoney(
+          sheet,
+          row++,
+          'Đơn giá OT/giờ (Thứ 7, CN)',
+          e.otRateWeekend,
+        );
+      }
+      if (e.otRateHoliday > 0) {
+        _putLabelMoney(
+          sheet,
+          row++,
+          'Đơn giá OT/giờ (ngày lễ)',
+          e.otRateHoliday,
+        );
+      }
 
       _put(sheet, _colDate, row, TextCellValue('Ngày'), _headStyle);
       _put(sheet, _colWeekday, row, TextCellValue('Thứ'), _headStyle);
@@ -103,26 +128,36 @@ class ExportService {
       row++;
 
       var units = 0.0;
+      var unitsHoliday = 0.0;
       var absent = 0;
       var otMinutes = 0;
+      var otNormal = 0;
+      var otWeekend = 0;
+      var otHoliday = 0;
 
       for (final d in days) {
-        final r = byEmployeeDay['${e.id}_${Fmt.dateKey(d)}'];
-        final weekend = d.weekday == DateTime.sunday;
+        final dateKey = Fmt.dateKey(d);
+        final r = byEmployeeDay['${e.id}_$dateKey'];
+        // Cuối tuần hoặc ngày lễ đều đánh dấu chung một kiểu ô: đây chỉ là
+        // gợi ý trực quan, đơn giá thật áp dụng theo từng loại đã tính riêng
+        // ở dưới (otNormal/otWeekend/otHoliday).
+        final isWeekend =
+            d.weekday == DateTime.saturday || d.weekday == DateTime.sunday;
+        final isSpecial = isWeekend || holidayDates.contains(dateKey);
 
         _put(
           sheet,
           _colDate,
           row,
           TextCellValue(Fmt.dayMonth(d)),
-          weekend ? _weekendStyle : _cellCenter,
+          isSpecial ? _weekendStyle : _cellCenter,
         );
         _put(
           sheet,
           _colWeekday,
           row,
           TextCellValue(_weekdayShort[d.weekday - 1]),
-          weekend ? _weekendStyle : _cellCenter,
+          isSpecial ? _weekendStyle : _cellCenter,
         );
 
         if (r == null) {
@@ -134,8 +169,17 @@ class ExportService {
         }
 
         units += r.workUnits;
+        if (holidayDates.contains(dateKey)) unitsHoliday += r.workUnits;
         if (r.status == AttendanceStatus.absent) absent++;
         otMinutes += r.overtimeMinutes;
+        switch (r.otDayKind(holidayDates)) {
+          case OtDayKind.normal:
+            otNormal += r.overtimeMinutes;
+          case OtDayKind.weekend:
+            otWeekend += r.overtimeMinutes;
+          case OtDayKind.holiday:
+            otHoliday += r.overtimeMinutes;
+        }
 
         _put(
           sheet,
@@ -163,8 +207,11 @@ class ExportService {
         row++;
       }
 
-      final basePay = units * e.dailySalary;
-      final otPay = (otMinutes / 60.0) * e.otRate;
+      final basePay = (units - unitsHoliday) * e.dailySalary +
+          unitsHoliday * e.dailySalary * holidayPayMultiplier;
+      final otPay = (otNormal / 60.0) * e.otRate +
+          (otWeekend / 60.0) * (e.otRateWeekend > 0 ? e.otRateWeekend : e.otRate) +
+          (otHoliday / 60.0) * (e.otRateHoliday > 0 ? e.otRateHoliday : e.otRate);
 
       _put(sheet, _colStatus, row, TextCellValue('TỔNG'), _totalCountStyle);
       _put(
@@ -185,6 +232,17 @@ class ExportService {
 
       _putLabelNumber(sheet, row++, 'Số ngày nghỉ', absent.toDouble());
       _putLabelMoney(sheet, row++, 'Lương công', basePay);
+      // Chỉ hiện khi có công rơi vào ngày lễ và cơ sở có đặt hệ số nhân -
+      // để người xem biết vì sao "Lương công" không đơn giản bằng
+      // Tổng công × Lương/ngày.
+      if (unitsHoliday > 0 && holidayPayMultiplier > 1) {
+        _putLabelNumber(
+          sheet,
+          row++,
+          'Trong đó công ngày lễ (x${Fmt.workUnits(holidayPayMultiplier)})',
+          unitsHoliday,
+        );
+      }
       _putLabelMoney(sheet, row++, 'Tiền OT', otPay);
       _putLabelMoney(
         sheet,
@@ -275,6 +333,8 @@ class ExportService {
     required List<AttendanceRecord> records,
     required String orgName,
     required int workHoursPerDay,
+    Set<String> holidayDates = const {},
+    double holidayPayMultiplier = 1,
   }) async {
     final path = await exportPeriod(
       period: period,
@@ -282,6 +342,8 @@ class ExportService {
       records: records,
       orgName: orgName,
       workHoursPerDay: workHoursPerDay,
+      holidayDates: holidayDates,
+      holidayPayMultiplier: holidayPayMultiplier,
     );
 
     await SharePlus.instance.share(

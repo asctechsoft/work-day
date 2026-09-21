@@ -185,6 +185,36 @@ class AuthService {
     }
   }
 
+  /// Xoá vĩnh viễn tài khoản Firebase Auth - **không đăng nhập lại được**.
+  ///
+  /// **Không xoá dữ liệu Firestore** của cơ sở (`companies/{uid}` và toàn bộ
+  /// nhánh con vẫn giữ nguyên) - cùng tinh thần §0.7 CLAUDE.md "giữ toàn bộ
+  /// lịch sử", chỉ khác là ở cấp tài khoản chứ không phải nhân viên. Muốn
+  /// xoá cả dữ liệu công/lương thì vẫn phải dùng script `reset_data` từ
+  /// Console như cũ, đây chỉ đóng đường đăng nhập.
+  ///
+  /// Bắt buộc nhập lại mật khẩu: Firebase yêu cầu "recent login" cho thao
+  /// tác nhạy cảm này, không có thì ăn lỗi `requires-recent-login`.
+  Future<void> deleteAccount(String password) async {
+    final user = _auth.currentUser;
+    final email = user?.email;
+    if (user == null || email == null) {
+      throw const AuthFailure('Chưa đăng nhập.');
+    }
+    try {
+      await user.reauthenticateWithCredential(
+        EmailAuthProvider.credential(email: email, password: password),
+      );
+      // Huỷ lịch nhắc chấm công trước khi mất `currentUser`, giống signOut().
+      await NotificationService.instance.cancel();
+      await user.delete();
+    } on FirebaseAuthException catch (e) {
+      throw AuthFailure(_message(e));
+    }
+    final p = await SharedPreferences.getInstance();
+    await p.setBool(_kRemember, false);
+  }
+
   Stream<Map<String, dynamic>> watchAccount() =>
       _userDoc.snapshots().map((s) => s.data() ?? const <String, dynamic>{});
 

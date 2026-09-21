@@ -4,6 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../core/theme.dart';
 import '../services/auth_service.dart';
 import '../widgets/common.dart';
+import 'settings/review_screen.dart';
 
 /// Khoá đánh dấu đã chào tài khoản này trên máy này.
 ///
@@ -41,6 +42,12 @@ Future<void> showWelcomeIfFirstTime(BuildContext context) async {
   // Ghi sau khi đã hiện: đóng app giữa lúc dialog đang mở thì lần sau vẫn được
   // chào, thà chào hai lần còn hơn người dùng chưa kịp đọc đã mất luôn.
   await prefs.setBool(_seenKey(uid), true);
+
+  // Nối luôn bảng đánh giá sao ngay sau khi tắt dialog chào mừng - chỉ đúng
+  // một lần cùng lúc với dialog chào mừng (yêu cầu người dùng 21/09/2026),
+  // không phải mỗi lần mở app.
+  if (!context.mounted) return;
+  await showReviewDialog(context);
 }
 
 /// Đợi tới khi màn Home là route **trên cùng**, trả về `false` nếu chờ quá lâu.

@@ -6,9 +6,11 @@ import '../services/auth_service.dart';
 import '../services/data_service.dart';
 import 'home_shell.dart';
 import 'intro_screen.dart';
+import 'onboarding_screen.dart';
 
-/// Điều hướng gốc sau màn splash: chưa đăng nhập -> màn mở app -> đăng nhập.
-/// Đã đăng nhập -> vào thẳng 3 tab.
+/// Điều hướng gốc sau màn splash: chưa đăng nhập, chưa xem giới thiệu app
+/// -> OnboardingScreen -> IntroScreen -> đăng nhập. Đã đăng nhập -> vào thẳng
+/// 3 tab.
 ///
 /// Đây cũng là **chỗ duy nhất** gán `DataService.instance.companyId`. Quy ước:
 /// `companyId` = `uid` của chủ cơ sở (xem `firestore.rules`), nên chỉ cần biết
@@ -35,6 +37,14 @@ class _AuthGateState extends State<AuthGate> {
     return user;
   });
 
+  /// Đọc một lần cho cả phiên app.
+  late final Future<bool> _seenOnboarding = hasSeenOnboarding();
+
+  /// Đánh dấu đã xong Onboarding **trong phiên này**, không chờ đọc lại
+  /// `SharedPreferences`. `OnboardingScreen` chỉ gọi [setState] qua callback
+  /// này, **không** tự điều hướng - xem lý do ở comment trong `build()`.
+  bool _skipOnboarding = false;
+
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<User?>(
@@ -49,7 +59,29 @@ class _AuthGateState extends State<AuthGate> {
           );
         }
         if (snapshot.data == null) {
-          return const IntroScreen();
+          if (_skipOnboarding) return const IntroScreen();
+          return FutureBuilder<bool>(
+            future: _seenOnboarding,
+            builder: (context, seenSnap) {
+              if (!seenSnap.hasData) {
+                return const Scaffold(backgroundColor: Colors.transparent);
+              }
+              if (seenSnap.data!) return const IntroScreen();
+              // `OnboardingScreen` không được tự `Navigator.push`/
+              // `pushReplacement` sang `IntroScreen` - route gốc của
+              // Navigator chính là route của `AuthGate` này (StreamBuilder
+              // theo dõi đăng nhập). Thay route đó bằng một `IntroScreen`
+              // tĩnh thì "route đầu tiên" mà `LoginScreen.popUntil((r) =>
+              // r.isFirst)` quay về không còn là `AuthGate` nữa - đăng nhập
+              // xong `authState` đổi nhưng chẳng còn ai lắng nghe để tự
+              // chuyển sang `HomeShell`, kẹt luôn ở `IntroScreen`. Onboarding
+              // xong chỉ cần gọi lại `setState` ở đây, vẫn trong đúng route
+              // của `AuthGate`.
+              return OnboardingScreen(
+                onFinished: () => setState(() => _skipOnboarding = true),
+              );
+            },
+          );
         }
         return const HomeShell();
       },

@@ -57,6 +57,29 @@ kể cả khi thấy "thêm cái này thì hay hơn".
 5. **OT lưu riêng với công.** OT không bao giờ làm thay đổi `workUnits`.
    OT không được âm, có thể bằng 0, và **độc lập với trạng thái** (đặc tả cho
    phép Nghỉ vẫn có OT — đừng "sửa" thành reset OT về 0).
+   > **Đơn giá OT có thể khác nhau theo loại ngày** - ngoại lệ bổ sung
+   > 19/09/2026, cùng dạng ngoại lệ đã mở ở §0.2/§0.4: mỗi nhân viên có thêm
+   > `otRateWeekend` (Thứ 7, CN) và `otRateHoliday` (ngày lễ, khai tay ở
+   > `AppSettings.holidayDates` vì app không có sẵn lịch lễ). Cả hai **để 0 =
+   > dùng chung `otRate`** như ngày thường - không phải "không trả OT" như
+   > cách `otRate = 0` vẫn nghĩa. Một ngày vừa là lễ vừa là cuối tuần thì tính
+   > theo giá lễ (ưu tiên hơn cuối tuần). Không có khái niệm % hay hệ số nhân
+   > - giữ đúng kiểu nhập tiền tuyệt đối như mọi ô khác trong app (§5). Xem
+   > `AttendanceRecord.otDayKind`, `MonthlySummary.otPay` - đừng cộng
+   > `overtimeMinutes` rồi nhân một `otRate` duy nhất nữa, phải cộng riêng ba
+   > loại phút rồi nhân từng đơn giá tương ứng.
+   > **Lương công (không phải OT) của ngày lễ cũng có thể nhân hệ số** -
+   > ngoại lệ bổ sung tiếp theo 21/09/2026, người dùng hỏi rồi yêu cầu thêm
+   > sau khi đã có `otRateHoliday` ở trên. Đây **là** một hệ số nhân
+   > (`AppSettings.holidayPayMultiplier`, chọn x1/x2/x3 ở Cài đặt), khác hẳn
+   > câu "không có khái niệm % hay hệ số nhân" vừa nói ở trên - câu đó chỉ áp
+   > cho **đơn giá OT** (`otRate`/`otRateWeekend`/`otRateHoliday`, luôn là
+   > tiền tuyệt đối). Hệ số này chỉ nhân vào **`basePay`** (lương công =
+   > tổng công × lương/ngày), áp dụng riêng cho phần công rơi đúng ngày trong
+   > `holidayDates`, phần công ngày khác không đổi. Hai thứ cộng lại
+   > (`MonthlySummary.basePay` đã nhân hệ số + `otPay` theo `otRateHoliday`)
+   > mới ra đúng tổng lương của một ngày lễ có tăng ca - xem
+   > `DataService.summarize` (tham số `holidayPayMultiplier`).
 6. **Không chốt/khoá bảng lương.** Không có DRAFT/LOCKED. Lương luôn được
    tính lại từ dữ liệu công của kỳ đang chọn. Thẻ "Chốt kỳ" (cuối kiểu xem
    "Bảng lương" ở tab Tổng quan) chỉ là xuất file, không khoá gì cả.
@@ -178,8 +201,11 @@ lib/
 │   └── payroll_trend_chart.dart quỹ lương theo tháng / quý / năm (xem §5.1)
 └── screens/
     ├── splash_screen.dart       màn chào + khởi tạo Firebase (xem §5.4)
-    ├── auth_gate.dart           chưa login -> IntroScreen, đã login -> HomeShell;
+    ├── auth_gate.dart           chưa login, chưa xem giới thiệu -> OnboardingScreen;
+    │                            chưa login, đã xem -> IntroScreen; đã login -> HomeShell;
     │                            gán DataService.companyId = uid (xem §4)
+    ├── onboarding_screen.dart   giới thiệu app 3 màn trượt ngang, chỉ hiện lần đầu
+    │                            trên máy (khoá `onboarding_seen`, xem §5.5)
     ├── intro_screen.dart        + AppLogo (dùng lại ở login và about)
     ├── login_screen.dart        + nút Tạo cơ sở mới
     ├── register_screen.dart     tạo cơ sở mới (tên cơ sở + email + mật khẩu)
@@ -218,6 +244,18 @@ Không gọi `FirebaseFirestore.instance` trực tiếp từ màn hình.
   `Console → Authentication → Users` (Reset password). Người còn đăng nhập
   được thì tự đổi ở màn "Thông tin tài khoản" (`AuthService.changePassword`,
   vẫn giữ).
+- **"Xoá tài khoản"** (`AuthService.deleteAccount`, nút ở màn "Thông tin tài
+  khoản", người dùng yêu cầu 21/09/2026) - **chỉ xoá tài khoản Firebase Auth**
+  (không đăng nhập lại được), **không xoá dữ liệu Firestore** của cơ sở
+  (`companies/{uid}` và toàn bộ nhánh con vẫn giữ nguyên) - cùng tinh thần
+  §0.7 "giữ toàn bộ lịch sử", chỉ khác cấp tài khoản thay vì cấp nhân viên.
+  Muốn xoá cả dữ liệu công/lương thì vẫn phải chạy script `reset_data` từ
+  Console như cũ, hai việc tách biệt có chủ đích. Bắt buộc nhập lại mật khẩu
+  trước khi xoá (Firebase yêu cầu "recent login" cho thao tác này). Màn gọi
+  hàm này là một route được `push`, không phải route gốc của `AuthGate`, nên
+  xoá xong phải `Navigator.popUntil((r) => r.isFirst)` mới thấy được
+  `IntroScreen`/`OnboardingScreen` mà `AuthGate` đã tự chuyển sang - giống
+  đúng bẫy `popUntil` sau đăng nhập ở `login_screen.dart`.
 - Rules ở `firestore.rules`: cách ly theo `request.auth.uid == companyId`, và
   một danh sách uid cho tài khoản tổng (chỉ đọc). **Không có `get()` trong
   rules** → không tốn thêm read cho mỗi lượt đọc/ghi; đừng đổi sang kiểu tra
@@ -278,9 +316,9 @@ Dữ liệu của mỗi cơ sở nằm gọn trong một nhánh. `{cid}` = `comp
 | Collection | Doc ID | Trường |
 |---|---|---|
 | `companies` | `{cid}` | `orgName`, `ownerAccount`, `active`, `createdAt` |
-| `companies/{cid}/employees` | tự sinh | `name`, `nameLower`, `dailySalary`, `otRate`, `phone`, `active`, `createdAt` |
+| `companies/{cid}/employees` | tự sinh | `name`, `nameLower`, `dailySalary`, `otRate`, `otRateWeekend`, `otRateHoliday`, `phone`, `active`, `createdAt` |
 | `companies/{cid}/attendance` | `{employeeId}_{yyyy-MM-dd}` | `employeeId`, `workDate`, `month`, `status`, `workUnits`, `overtimeMinutes`, `updatedAt` |
-| `companies/{cid}/settings` | `app` | `orgName`, `currency`, `otPresets`, `workHoursPerDay`, `defaultDailySalary`, `defaultOtRate`, `payPeriodStartDay`, `remindEnabled`, `remindHour`, `remindMinute` |
+| `companies/{cid}/settings` | `app` | `orgName`, `currency`, `otPresets`, `workHoursPerDay`, `defaultDailySalary`, `defaultOtRate`, `payPeriodStartDay`, `remindEnabled`, `remindHour`, `remindMinute`, `holidayDates`, `holidayPayMultiplier` |
 | `companies/{cid}/reviews` | tự sinh | `stars` (1..5), `comment`, `appVersion`, `createdAt` |
 | `users` | `{uid}` | `account`, `displayName`, `companyId`, `role`, `lastLoginAt` |
 
@@ -347,12 +385,26 @@ trước đến 25 tháng này". `settings.payPeriodStartDay` (1..28) quyết đ
 ### Công thức lương — đặt ở `MonthlySummary`, đừng viết lại chỗ khác
 
 ```
-basePay  = totalWorkUnits × dailySalary
-otPay    = (overtimeMinutes / 60) × otRate
+basePay  = (totalWorkUnits - workUnitsHoliday) × dailySalary
+         + workUnitsHoliday × dailySalary × holidayPayMultiplier
+otPay    = (overtimeMinutesNormal  / 60) × otRate
+         + (overtimeMinutesWeekend / 60) × (otRateWeekend > 0 ? otRateWeekend : otRate)
+         + (overtimeMinutesHoliday / 60) × (otRateHoliday > 0 ? otRateHoliday : otRate)
 totalPay = basePay + otPay
 ```
 
-`otRate = 0` là hợp lệ và có nghĩa "cơ sở không trả OT riêng".
+`otRate = 0` là hợp lệ và có nghĩa "cơ sở không trả OT riêng". `otRateWeekend`/
+`otRateHoliday = 0` nghĩa khác hẳn: "dùng chung `otRate`", không phải "không
+trả" — xem ghi chú ở §0.5. Ngày nào thuộc loại nào (thường/cuối tuần/lễ) tính
+bằng `AttendanceRecord.otDayKind(holidayDates)`, `holidayDates` lấy từ
+`AppSettings.holidayDates`.
+
+`holidayPayMultiplier` (mặc định 1, chọn x1/x2/x3 ở Cài đặt → Thiết lập lương
+& tăng ca) là hệ số nhân riêng cho **lương công** của ngày lễ, khác hoàn toàn
+`otRateHoliday` (chỉ nhân vào **tiền OT**) — hai thứ tính độc lập rồi cộng lại
+mới ra tổng lương của một ngày lễ có tăng ca. `workUnitsHoliday` là phần công
+rơi đúng ngày trong `holidayDates`, tách ra từ `totalWorkUnits` chỉ để tính
+`basePay`, không dùng ở đâu khác.
 
 ---
 
@@ -701,9 +753,31 @@ giây: *"mới đầu bật lên hiện màn này lâu vậy"*. Thứ tự hiệ
   cấp thư viện (top-level) — làm vậy là gọi `FirebaseFirestore.instance` trước
   khi init và crash.
 
-### 5.5. Dialog chào mừng và phần đánh giá app
+### 5.5. Giới thiệu app, dialog chào mừng và phần đánh giá app
 
-Cả hai do người dùng yêu cầu ngày 08/09/2026.
+**Giới thiệu app** (`screens/onboarding_screen.dart`, người dùng yêu cầu
+19/09/2026, theo ảnh mẫu) — 3 màn trượt ngang (`PageView`) giới thiệu app
+trước cả `IntroScreen`, dùng ảnh `assets/images/on_boarding_1.png`/`_2`/`_3`.
+
+- **Hiện đúng một lần cho cả máy**, không ghép theo tài khoản: khoá
+  `onboarding_seen` trong `SharedPreferences` (khác `welcome_seen_<uid>` của
+  dialog chào mừng bên dưới — màn này hiện **trước khi đăng nhập**, giới
+  thiệu chung về app chứ không phải hướng dẫn riêng một tài khoản). `AuthGate`
+  đọc khoá này một lần (`late final Future<bool> _seenOnboarding`) để quyết
+  định hiện `OnboardingScreen` hay `IntroScreen` khi chưa đăng nhập.
+- **Màn đầu khác hai màn sau**: tiêu đề ("WorkDay" + "Chấm công & tính lương"
+  + tagline "Đơn giản • Nhanh chóng • Dễ dùng") nằm **trên** ảnh minh hoạ,
+  đúng ảnh mẫu; hai màn sau thì ảnh minh hoạ nằm trên tiêu đề như kiểu giới
+  thiệu tính năng thông thường. Xem cờ `isFirst` ở `_OnboardingPageView`.
+- Nút "Bỏ qua" ở góc trên phải chỉ hiện ở hai màn đầu — màn cuối đã có nút
+  "Bắt đầu ngay" ngay dưới nên không cần "bỏ qua" gì nữa. Cả "Bỏ qua" và
+  "Bắt đầu ngay" đều ghi khoá `onboarding_seen` rồi `pushReplacement` sang
+  `IntroScreen`, luồng đăng nhập phía sau giữ nguyên không đổi gì.
+- Nút chính "Tiếp theo"/"Bắt đầu ngay" dùng `GradientButton` (đúng quy ước
+  §5 - nút được bấm nhiều nhất trên màn), nút lùi trang chỉ là icon tròn viền
+  mảnh, không tranh chú ý với nút chính.
+
+Hai phần dưới đây do người dùng yêu cầu ngày 08/09/2026.
 
 **Dialog chào mừng** (`screens/welcome_dialog.dart`) — `showWelcomeIfFirstTime`,
 gọi từ `HomeShell.initState` trong `addPostFrameCallback`:
@@ -747,22 +821,35 @@ gọi từ `HomeShell.initState` trong `addPostFrameCallback`:
   mới ở đó sẽ không được đóng gói.
 
 **Đánh giá app** (`screens/settings/review_screen.dart`, `showReviewDialog`) —
-**là một dialog nổi trên tab Cài đặt, không phải màn `push` riêng.** Bản đầu
-dựng thành `ReviewScreen` (cả `Scaffold`) rồi lại đổi vì người dùng muốn xem
-ảnh mẫu (dialog kiểu "rate us" phổ biến: linh vật `assets/images/img_rate.png`
+**là một bottom sheet nổi trên màn đang xem, không phải màn `push` riêng.**
+Bản đầu dựng thành `ReviewScreen` (cả `Scaffold`) rồi lại đổi vì người dùng
+muốn xem ảnh mẫu (kiểu "rate us" phổ biến: linh vật `assets/images/img_rate.png`
 + tiêu đề + 5 sao + nút "Đánh giá ngay" + "Để sau") — **đừng quay lại kiểu
-`Scaffold` toàn màn**, giữ đúng khuôn dialog.
+`Scaffold` toàn màn**, giữ đúng khuôn bảng nổi. Bản đầu là `Dialog` nổi giữa
+màn, đổi sang `showModalBottomSheet` (trượt lên từ đáy) theo yêu cầu người
+dùng 21/09/2026 - tên hàm `showReviewDialog` **giữ nguyên** dù bên trong đã
+đổi cơ chế, đừng đổi tên rồi phải sửa lại mọi nơi gọi.
 
+- **Tự nối tiếp ngay sau dialog chào mừng lần đầu** (yêu cầu 21/09/2026):
+  `showWelcomeIfFirstTime` ở `welcome_dialog.dart` gọi `showReviewDialog`
+  ngay sau khi dialog chào mừng đóng và đã ghi khoá `welcome_seen_<uid>` -
+  chỉ đúng một lần cùng lúc với dialog chào mừng, không phải mỗi lần mở app.
+  Mục "Đánh giá ứng dụng" ở tab Cài đặt vẫn gọi thẳng `showReviewDialog` như
+  cũ để xem lại bất cứ lúc nào - hai chỗ gọi dùng chung một hàm, không chép
+  logic.
 - **`showReviewDialog(context)` gọi thẳng, không qua `pushScreen`.** Bên trong
-  `showDialog<bool>` trả về `true` khi bấm "Đánh giá ngay", `false`/`null` khi
-  "Để sau" hoặc nút X.
-- **Mở Play Store *sau khi* dialog đã đóng**, dùng `context` của màn Cài đặt
+  `showModalBottomSheet<bool>` trả về `true` khi bấm "Đánh giá ngay",
+  `false`/`null` khi "Để sau", vuốt xuống hoặc chạm ra ngoài.
+- **Mọi `showModalBottomSheet` phải bọc `SafeArea`** (đúng quy ước §5.2.3) -
+  `_ReviewSheet.build()` bọc `SafeArea(top: false)` vì `showDragHandle: true`
+  đã tự chừa khoảng trên, chỉ cần né thanh điều hướng dưới.
+- **Mở Play Store *sau khi* sheet đã đóng**, dùng `context` của màn gọi hàm
   (tham số của `showReviewDialog`) — *không* dùng `context` bên trong
-  `_ReviewDialog` để `launchUrl`/`showToast`: dialog đã `pop` thì context đó
+  `_ReviewSheet` để `launchUrl`/`showToast`: sheet đã `pop` thì context đó
   mất, gọi vào là ăn lỗi hoặc không hiện gì. Đây là lý do hàm tách làm hai
-  lớp: `_ReviewDialog` chỉ `pop(true/false)`, còn việc mở Store nằm ở
+  lớp: `_ReviewSheet` chỉ `pop(true/false)`, còn việc mở Store nằm ở
   `showReviewDialog` — thấy y hệt bẫy "màn được `push`" ở §6 nhưng lần này là
-  dialog với context bên ngoài.
+  bảng nổi với context bên ngoài.
 - 5 sao **sáng lần lượt khi mở dialog** (`_animateStars`, mặc định 5 sao) và
   chạy lại nếu chạm chọn số sao khác — hiệu ứng dùng
   `ScaleTransition(scale: animation, ...)`, **không phải** tham số

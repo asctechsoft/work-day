@@ -102,6 +102,8 @@ class _OverviewTabState extends State<OverviewTab> {
         records: records,
         orgName: _settings.orgName,
         workHoursPerDay: _settings.workHoursPerDay,
+        holidayDates: _settings.holidayDates.toSet(),
+        holidayPayMultiplier: _settings.holidayPayMultiplier,
       );
     } catch (e) {
       if (mounted) showToast(context, 'Không xuất được file: $e', error: true);
@@ -146,8 +148,12 @@ class _OverviewTabState extends State<OverviewTab> {
                   builder: (context, recSnap) {
                     final records =
                         recSnap.data ?? const <AttendanceRecord>[];
-                    final summaries =
-                        DataService.summarize(employees, records);
+                    final summaries = DataService.summarize(
+                      employees,
+                      records,
+                      holidayDates: _settings.holidayDates.toSet(),
+                      holidayPayMultiplier: _settings.holidayPayMultiplier,
+                    );
                     return _buildBody(employees, summaries);
                   },
                 ),
@@ -272,6 +278,8 @@ class _OverviewTabState extends State<OverviewTab> {
             summaries: summaries,
             period: period,
             workHoursPerDay: _settings.workHoursPerDay,
+            holidayDates: _settings.holidayDates.toSet(),
+            holidayPayMultiplier: _settings.holidayPayMultiplier,
           ),
           const SizedBox(height: 14),
           // "Đáng chú ý" nằm ngay dưới bảng lương: cùng là chuyện so sánh
@@ -297,6 +305,8 @@ class _OverviewTabState extends State<OverviewTab> {
           PayrollTrendChart(
             payPeriodStartDay: _settings.payPeriodStartDay,
             year: period.anchor.year,
+            holidayDates: _settings.holidayDates.toSet(),
+            holidayPayMultiplier: _settings.holidayPayMultiplier,
           ),
       ],
     );
@@ -412,12 +422,16 @@ class _SummaryTable extends StatelessWidget {
   final List<MonthlySummary> summaries;
   final PayPeriod period;
   final int workHoursPerDay;
+  final Set<String> holidayDates;
+  final double holidayPayMultiplier;
 
   const _SummaryTable({
     required this.employees,
     required this.summaries,
     required this.period,
     required this.workHoursPerDay,
+    required this.holidayDates,
+    required this.holidayPayMultiplier,
   });
 
   @override
@@ -479,7 +493,6 @@ class _SummaryTable extends StatelessWidget {
           employeeId: e.id,
           totalWorkUnits: 0,
           absentDays: 0,
-          overtimeMinutes: 0,
           dailySalary: e.dailySalary,
           otRate: e.otRate,
         );
@@ -495,6 +508,8 @@ class _SummaryTable extends StatelessWidget {
             employee: e,
             period: period,
             workHoursPerDay: workHoursPerDay,
+            holidayDates: holidayDates,
+            holidayPayMultiplier: holidayPayMultiplier,
           ),
         ),
         child: Container(

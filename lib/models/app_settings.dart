@@ -32,6 +32,17 @@ class AppSettings {
   /// Phút nhắc (0..59, làm tròn về mốc 5 phút ở UI), mặc định 0.
   final int remindMinute;
 
+  /// Danh sách ngày lễ (yyyy-MM-dd) được trả OT theo đơn giá riêng
+  /// (`Employee.otRateHoliday`). Nhập tay ở Cài đặt vì app không có sẵn
+  /// lịch ngày lễ - danh sách ngày lễ mỗi năm một khác, kể cả lễ âm lịch.
+  final List<String> holidayDates;
+
+  /// Hệ số nhân lương công của ngày lễ (2 = gấp đôi, 3 = gấp ba...).
+  /// Mặc định 1 = không nhân. Áp dụng cho **cả cơ sở**, không phải riêng
+  /// từng nhân viên - khác `Employee.otRateHoliday` (chỉ áp cho phần tăng
+  /// ca, xem `MonthlySummary.basePay`/`otPay`).
+  final double holidayPayMultiplier;
+
   const AppSettings({
     this.orgName = 'WorkDay',
     this.currency = 'VND',
@@ -43,6 +54,8 @@ class AppSettings {
     this.remindEnabled = true,
     this.remindHour = 18,
     this.remindMinute = 0,
+    this.holidayDates = const [],
+    this.holidayPayMultiplier = 1,
   });
 
   factory AppSettings.fromMap(Map<String, dynamic>? d) {
@@ -66,6 +79,12 @@ class AppSettings {
       remindEnabled: (d['remindEnabled'] as bool?) ?? true,
       remindHour: ((d['remindHour'] as num?)?.toInt() ?? 18).clamp(0, 23),
       remindMinute: ((d['remindMinute'] as num?)?.toInt() ?? 0).clamp(0, 59),
+      holidayDates: (d['holidayDates'] as List?)
+              ?.map((e) => e.toString())
+              .toList() ??
+          const [],
+      holidayPayMultiplier:
+          ((d['holidayPayMultiplier'] as num?)?.toDouble() ?? 1).clamp(1, 10),
     );
   }
 
@@ -80,6 +99,8 @@ class AppSettings {
         'remindEnabled': remindEnabled,
         'remindHour': remindHour,
         'remindMinute': remindMinute,
+        'holidayDates': holidayDates,
+        'holidayPayMultiplier': holidayPayMultiplier,
         'updatedAt': FieldValue.serverTimestamp(),
       };
 
@@ -94,6 +115,8 @@ class AppSettings {
     bool? remindEnabled,
     int? remindHour,
     int? remindMinute,
+    List<String>? holidayDates,
+    double? holidayPayMultiplier,
   }) =>
       AppSettings(
         orgName: orgName ?? this.orgName,
@@ -106,5 +129,7 @@ class AppSettings {
         remindEnabled: remindEnabled ?? this.remindEnabled,
         remindHour: remindHour ?? this.remindHour,
         remindMinute: remindMinute ?? this.remindMinute,
+        holidayDates: holidayDates ?? this.holidayDates,
+        holidayPayMultiplier: holidayPayMultiplier ?? this.holidayPayMultiplier,
       );
 }

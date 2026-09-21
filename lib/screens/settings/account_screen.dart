@@ -90,6 +90,31 @@ class _AccountScreenState extends State<AccountScreen> {
     }
   }
 
+  Future<void> _deleteAccount() async {
+    final password = await showDialog<String>(
+      context: context,
+      builder: (_) => const _DeleteAccountDialog(),
+    );
+    if (password == null) return;
+
+    setState(() => _busy = true);
+    try {
+      await _auth.deleteAccount(password);
+      if (!mounted) return;
+      // Route gốc (AuthGate) đã tự đổi sang IntroScreen/OnboardingScreen
+      // ngay khi authState về null, nhưng màn này là một route được `push`
+      // nằm TRÊN route gốc đó - phải pop hết mới thấy được (giống bẫy
+      // `popUntil` sau đăng nhập ở `login_screen.dart`).
+      Navigator.of(context).popUntil((r) => r.isFirst);
+    } on AuthFailure catch (e) {
+      if (mounted) showToast(context, e.message, error: true);
+    } catch (e) {
+      if (mounted) showToast(context, 'Không xoá được tài khoản: $e', error: true);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final User? user = _auth.currentUser;
@@ -203,6 +228,48 @@ class _AccountScreenState extends State<AccountScreen> {
                     ],
                   ),
                 ),
+                const SizedBox(height: 14),
+
+                AppCard(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const SectionTitle('Xoá tài khoản'),
+                      const SizedBox(height: 6),
+                      const Text(
+                        'Tài khoản sẽ không đăng nhập lại được. Dữ liệu công '
+                        'và lương của cơ sở vẫn được giữ lại - liên hệ hỗ trợ '
+                        'nếu sau này cần khôi phục đăng nhập.',
+                        style: TextStyle(
+                          fontSize: 12.5,
+                          color: AppColors.textMuted,
+                          height: 1.4,
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+                      OutlinedButton.icon(
+                        onPressed: _busy ? null : _deleteAccount,
+                        icon: const Icon(
+                          Icons.delete_forever_rounded,
+                          size: 20,
+                        ),
+                        label: const Text('Xoá tài khoản'),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: AppColors.absent,
+                          minimumSize: const Size.fromHeight(46),
+                          side: const BorderSide(color: AppColors.absentSoft),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          textStyle: const TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               ],
             ),
     );
@@ -244,58 +311,193 @@ class _ChangePasswordDialogState extends State<_ChangePasswordDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
+    // `Dialog` thường (không phải `AlertDialog`): `AlertDialog` tự bọc nội
+    // dung trong `IntrinsicWidth`, nên dù đặt `insetPadding` nhỏ, dialog vẫn
+    // co lại theo đúng độ rộng nội dung rồi mới được `Align` ra giữa - phần
+    // dư ra hai bên nhìn như margin lớn hơn cả `insetPadding` đã đặt. Dùng
+    // `Dialog` trần + `CrossAxisAlignment.stretch` thì các ô nhập giãn đúng
+    // hết chiều rộng còn lại, `insetPadding` mới là margin thật nhìn thấy.
+    return Dialog(
       backgroundColor: AppColors.surface,
+      insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      title: const Text(
-        'Đổi mật khẩu',
-        style: TextStyle(
-          fontSize: 17,
-          fontWeight: FontWeight.w700,
-          color: AppColors.textDark,
-        ),
-      ),
-      content: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: _current,
-              obscureText: true,
-              decoration: const InputDecoration(hintText: 'Mật khẩu hiện tại'),
-            ),
-            const SizedBox(height: 10),
-            TextField(
-              controller: _next,
-              obscureText: true,
-              decoration: const InputDecoration(hintText: 'Mật khẩu mới'),
-            ),
-            const SizedBox(height: 10),
-            TextField(
-              controller: _confirm,
-              obscureText: true,
-              decoration: const InputDecoration(
-                hintText: 'Nhập lại mật khẩu mới',
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Text(
+                'Đổi mật khẩu',
+                style: TextStyle(
+                  fontSize: 17,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.textDark,
+                ),
               ),
-            ),
-            if (_error != null) ...[
+              const SizedBox(height: 16),
+              TextField(
+                controller: _current,
+                obscureText: true,
+                decoration: const InputDecoration(
+                  hintText: 'Mật khẩu hiện tại',
+                ),
+              ),
               const SizedBox(height: 10),
-              Text(
-                _error!,
-                style: const TextStyle(color: AppColors.absent, fontSize: 13),
+              TextField(
+                controller: _next,
+                obscureText: true,
+                decoration: const InputDecoration(hintText: 'Mật khẩu mới'),
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: _confirm,
+                obscureText: true,
+                decoration: const InputDecoration(
+                  hintText: 'Nhập lại mật khẩu mới',
+                ),
+              ),
+              if (_error != null) ...[
+                const SizedBox(height: 10),
+                Text(
+                  _error!,
+                  style: const TextStyle(
+                    color: AppColors.absent,
+                    fontSize: 13,
+                  ),
+                ),
+              ],
+              const SizedBox(height: 18),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  TextButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    style: TextButton.styleFrom(
+                      foregroundColor: AppColors.textMuted,
+                    ),
+                    child: const Text('Huỷ'),
+                  ),
+                  TextButton(onPressed: _submit, child: const Text('Đổi')),
+                ],
               ),
             ],
-          ],
+          ),
         ),
       ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          style: TextButton.styleFrom(foregroundColor: AppColors.textMuted),
-          child: const Text('Huỷ'),
+    );
+  }
+}
+
+/// Nhập mật khẩu hiện tại để xác nhận trước khi xoá tài khoản - Firebase bắt
+/// buộc "recent login" cho thao tác nhạy cảm này (xem
+/// `AuthService.deleteAccount`). Trả về mật khẩu đã nhập, hoặc `null` nếu bấm
+/// Huỷ.
+///
+/// `Dialog` thường, không phải `AlertDialog`: `AlertDialog` tự bọc nội dung
+/// trong `IntrinsicWidth` nên co hẹp lại bất kể `insetPadding` đặt bao nhiêu
+/// - cùng lý do đã sửa ở `_ChangePasswordDialog`.
+class _DeleteAccountDialog extends StatefulWidget {
+  const _DeleteAccountDialog();
+
+  @override
+  State<_DeleteAccountDialog> createState() => _DeleteAccountDialogState();
+}
+
+class _DeleteAccountDialogState extends State<_DeleteAccountDialog> {
+  final _password = TextEditingController();
+  String? _error;
+
+  @override
+  void dispose() {
+    _password.dispose();
+    super.dispose();
+  }
+
+  void _submit() {
+    if (_password.text.isEmpty) {
+      setState(() => _error = 'Vui lòng nhập mật khẩu hiện tại');
+      return;
+    }
+    Navigator.of(context).pop(_password.text);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      backgroundColor: AppColors.surface,
+      insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Text(
+                'Xoá tài khoản',
+                style: TextStyle(
+                  fontSize: 17,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.textDark,
+                ),
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                'Không thể hoàn tác - tài khoản sẽ không đăng nhập lại được. '
+                'Dữ liệu công và lương vẫn được giữ lại.',
+                style: TextStyle(
+                  fontSize: 12.5,
+                  color: AppColors.textMuted,
+                  height: 1.4,
+                ),
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: _password,
+                obscureText: true,
+                autofocus: true,
+                onSubmitted: (_) => _submit(),
+                decoration: const InputDecoration(
+                  hintText: 'Nhập mật khẩu hiện tại để xác nhận',
+                ),
+              ),
+              if (_error != null) ...[
+                const SizedBox(height: 10),
+                Text(
+                  _error!,
+                  style: const TextStyle(
+                    color: AppColors.absent,
+                    fontSize: 13,
+                  ),
+                ),
+              ],
+              const SizedBox(height: 18),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  TextButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    style: TextButton.styleFrom(
+                      foregroundColor: AppColors.textMuted,
+                    ),
+                    child: const Text('Huỷ'),
+                  ),
+                  TextButton(
+                    onPressed: _submit,
+                    style: TextButton.styleFrom(
+                      foregroundColor: AppColors.absent,
+                    ),
+                    child: const Text('Xoá tài khoản'),
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
-        TextButton(onPressed: _submit, child: const Text('Đổi')),
-      ],
+      ),
     );
   }
 }

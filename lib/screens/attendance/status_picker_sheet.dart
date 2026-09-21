@@ -303,63 +303,83 @@ class _StatusPickerSheet extends StatelessWidget {
     );
     return showDialog<double>(
       context: context,
-      builder: (ctx) => AlertDialog(
+      // `Dialog` thường, không phải `AlertDialog`: `AlertDialog` tự bọc nội
+      // dung trong `IntrinsicWidth` nên co lại theo độ rộng nội dung rồi mới
+      // `Align` ra giữa - `insetPadding` nhỏ vẫn nhìn như margin lớn hơn đặt.
+      builder: (ctx) => Dialog(
         backgroundColor: AppColors.surface,
+        insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text(
-          'Nhập số giờ đã làm',
-          style: TextStyle(
-            fontSize: 17,
-            fontWeight: FontWeight.w700,
-            color: AppColors.textDark,
-          ),
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            TextField(
-              controller: controller,
-              autofocus: true,
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-              decoration: const InputDecoration(
-                hintText: 'Ví dụ: 5.5',
-                suffixText: 'giờ',
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Text(
+                'Nhập số giờ đã làm',
+                style: TextStyle(
+                  fontSize: 17,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.textDark,
+                ),
               ),
-            ),
-            const SizedBox(height: 10),
-            Text(
-              'Một ngày làm đủ tính $workHoursPerDay giờ. App tự quy đổi số '
-              'giờ vừa nhập ra công để tính lương, làm tròn về mốc 5 phút.',
-              style: const TextStyle(fontSize: 12.5, color: AppColors.textMuted),
-            ),
-          ],
+              const SizedBox(height: 16),
+              TextField(
+                controller: controller,
+                autofocus: true,
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
+                decoration: const InputDecoration(
+                  hintText: 'Ví dụ: 5.5',
+                  suffixText: 'giờ',
+                ),
+              ),
+              const SizedBox(height: 10),
+              Text(
+                'Một ngày làm đủ tính $workHoursPerDay giờ. App tự quy đổi số '
+                'giờ vừa nhập ra công để tính lương, làm tròn về mốc 5 phút.',
+                style: const TextStyle(
+                  fontSize: 12.5,
+                  color: AppColors.textMuted,
+                ),
+              ),
+              const SizedBox(height: 18),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  TextButton(
+                    onPressed: () => Navigator.of(ctx).pop(),
+                    style: TextButton.styleFrom(
+                      foregroundColor: AppColors.textMuted,
+                    ),
+                    child: const Text('Huỷ'),
+                  ),
+                  TextButton(
+                    onPressed: () {
+                      final hours = double.tryParse(
+                        controller.text.trim().replaceAll(',', '.'),
+                      );
+                      if (hours == null || hours <= 0 || workHoursPerDay <= 0) {
+                        Navigator.of(ctx).pop();
+                        return;
+                      }
+                      // Làm tròn về mốc 5 phút như ô nhập tăng ca, tối đa số
+                      // giờ chuẩn một ngày (làm quá số giờ đó thì chọn "Đi
+                      // làm" rồi nhập riêng phần dư ra ở tăng ca).
+                      final maxMinutes = workHoursPerDay * 60;
+                      final minutes = ((hours * 60).round() / 5).round() * 5;
+                      final cappedMinutes = minutes.clamp(5, maxMinutes);
+                      Navigator.of(ctx).pop(cappedMinutes / maxMinutes);
+                    },
+                    child: const Text('Xong'),
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            style: TextButton.styleFrom(foregroundColor: AppColors.textMuted),
-            child: const Text('Huỷ'),
-          ),
-          TextButton(
-            onPressed: () {
-              final hours =
-                  double.tryParse(controller.text.trim().replaceAll(',', '.'));
-              if (hours == null || hours <= 0 || workHoursPerDay <= 0) {
-                Navigator.of(ctx).pop();
-                return;
-              }
-              // Làm tròn về mốc 5 phút như ô nhập tăng ca, tối đa số giờ
-              // chuẩn một ngày (làm quá số giờ đó thì chọn "Đi làm" rồi nhập
-              // riêng phần dư ra ở tăng ca).
-              final maxMinutes = workHoursPerDay * 60;
-              final minutes = ((hours * 60).round() / 5).round() * 5;
-              final cappedMinutes = minutes.clamp(5, maxMinutes);
-              Navigator.of(ctx).pop(cappedMinutes / maxMinutes);
-            },
-            child: const Text('Xong'),
-          ),
-        ],
       ),
     );
   }

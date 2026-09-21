@@ -269,126 +269,139 @@ class _EmployeeRow extends StatelessWidget {
 
     return Opacity(
       opacity: e.active ? 1 : 0.62,
-      child: Container(
-        padding: const EdgeInsets.fromLTRB(8, 10, 4, 10),
-        decoration: BoxDecoration(
-          color: AppColors.surface,
+      // `Material` + `InkWell` cho cả dòng, không phải `Container(decoration:)`
+      // - lý do đúng như `attendance_row.dart` (§5.2 CLAUDE.md): `InkWell`
+      // nằm trong `Container` có màu thì gợn nước bị nền che, chạm xong
+      // không thấy phản hồi gì. Bấm bất kỳ đâu trên dòng (ngoại trừ nút bút
+      // và nút "⋮" - hai nút đó tự bắt tap riêng) đều mở luôn màn sửa, giữ
+      // nguyên nút bút cho người dùng thấy rõ có thao tác sửa ở đây.
+      child: Material(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(14),
+        child: InkWell(
           borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: AppColors.border),
-        ),
-        child: Row(
-          children: [
-            SizedBox(
-              width: 22,
-              child: Text(
-                '$index',
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.textMuted,
-                ),
-              ),
+          onTap: onEdit,
+          child: Container(
+            padding: const EdgeInsets.fromLTRB(8, 10, 4, 10),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: AppColors.border),
             ),
-            const SizedBox(width: 4),
-            EmployeeAvatar(initials: e.initials, size: 40),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Flexible(
-                        child: Text(
-                          e.name,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w700,
-                            color: AppColors.textDark,
-                          ),
-                        ),
-                      ),
-                      if (!e.active) ...[
-                        const SizedBox(width: 6),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 6,
-                            vertical: 2,
-                          ),
-                          decoration: BoxDecoration(
-                            color: AppColors.absentSoft,
-                            borderRadius: BorderRadius.circular(5),
-                          ),
-                          child: const Text(
-                            'Đã nghỉ',
-                            style: TextStyle(
-                              fontSize: 10.5,
-                              fontWeight: FontWeight.w700,
-                              color: AppColors.absent,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                  const SizedBox(height: 3),
-                  Text(
-                    'Lương/ngày: ${Fmt.currency(e.dailySalary)}'
-                    '${e.otRate > 0 ? ' • OT: ${Fmt.currency(e.otRate)}/h' : ''}',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
+            child: Row(
+              children: [
+                SizedBox(
+                  width: 22,
+                  child: Text(
+                    '$index',
+                    textAlign: TextAlign.center,
                     style: const TextStyle(
-                      fontSize: 12.5,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
                       color: AppColors.textMuted,
                     ),
                   ),
-                ],
-              ),
-            ),
-            IconButton(
-              onPressed: onEdit,
-              tooltip: 'Sửa',
-              icon: const Icon(
-                Icons.edit_outlined,
-                size: 20,
-                color: AppColors.primary,
-              ),
-              splashRadius: 20,
-            ),
-            PopupMenuButton<String>(
-              tooltip: 'Thêm lựa chọn',
-              icon: const Icon(
-                Icons.more_vert_rounded,
-                size: 20,
-                color: AppColors.textMuted,
-              ),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-              onSelected: (value) {
-                if (value == 'toggle') onToggleActive();
-                if (value == 'delete') onDelete();
-              },
-              itemBuilder: (_) => [
-                PopupMenuItem(
-                  value: 'toggle',
-                  child: Text(
-                    e.active ? 'Chuyển sang Đã nghỉ' : 'Cho đi làm lại',
+                ),
+                const SizedBox(width: 4),
+                EmployeeAvatar(initials: e.initials, size: 40),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Flexible(
+                            child: Text(
+                              e.name,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w700,
+                                color: AppColors.textDark,
+                              ),
+                            ),
+                          ),
+                          if (!e.active) ...[
+                            const SizedBox(width: 6),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 6,
+                                vertical: 2,
+                              ),
+                              decoration: BoxDecoration(
+                                color: AppColors.absentSoft,
+                                borderRadius: BorderRadius.circular(5),
+                              ),
+                              child: const Text(
+                                'Đã nghỉ',
+                                style: TextStyle(
+                                  fontSize: 10.5,
+                                  fontWeight: FontWeight.w700,
+                                  color: AppColors.absent,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        'Lương/ngày: ${Fmt.currency(e.dailySalary)}'
+                        '${e.otRate > 0 ? ' • OT: ${Fmt.currency(e.otRate)}/h' : ''}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 12.5,
+                          color: AppColors.textMuted,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-                const PopupMenuItem(
-                  value: 'delete',
-                  child: Text(
-                    'Xoá hồ sơ',
-                    style: TextStyle(color: AppColors.absent),
+                IconButton(
+                  onPressed: onEdit,
+                  tooltip: 'Sửa',
+                  icon: const Icon(
+                    Icons.edit_outlined,
+                    size: 20,
+                    color: AppColors.primary,
                   ),
+                  splashRadius: 20,
+                ),
+                PopupMenuButton<String>(
+                  tooltip: 'Thêm lựa chọn',
+                  icon: const Icon(
+                    Icons.more_vert_rounded,
+                    size: 20,
+                    color: AppColors.textMuted,
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  onSelected: (value) {
+                    if (value == 'toggle') onToggleActive();
+                    if (value == 'delete') onDelete();
+                  },
+                  itemBuilder: (_) => [
+                    PopupMenuItem(
+                      value: 'toggle',
+                      child: Text(
+                        e.active ? 'Chuyển sang Đã nghỉ' : 'Cho đi làm lại',
+                      ),
+                    ),
+                    const PopupMenuItem(
+                      value: 'delete',
+                      child: Text(
+                        'Xoá hồ sơ',
+                        style: TextStyle(color: AppColors.absent),
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
-          ],
+          ),
         ),
       ),
     );
